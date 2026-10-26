@@ -3,12 +3,13 @@ const path = require('path');
 
 module.exports = (req, res) => {
   try {
-    // Tentukan token rahasia kamu di sini (bebas diganti sesukamu)
-    const SECRET_KEY = 'fan';
+    // Ambil informasi asal request (referer atau origin)
+    const referer = req.headers.referer || req.headers.origin || '';
     
-    // Cek apakah yang mengakses membawa token yang benar di URL (?key=...)
-    if (req.query.key !== SECRET_KEY) {
-      return res.status(403).send('Akses ditolak! Token salah.');
+    // Validasi: Harus berasal dari domain pbmobile.app
+    // (Kecuali kalau kamu mau test manual di browser, bisa dikondisikan)
+    if (!referer.includes('pbmobile.app')) {
+      return res.status(403).send('Akses ilegal! Hanya untuk pbmobile.app');
     }
 
     const filePath = path.join(process.cwd(), 'public', 'script.js');
