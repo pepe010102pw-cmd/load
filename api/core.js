@@ -3,12 +3,10 @@ const path = require('path');
 
 module.exports = (req, res) => {
   try {
-    // Ambil informasi asal request (referer atau origin)
-    const referer = req.headers.referer || req.headers.origin || '';
-    
-    // Validasi: Harus berasal dari domain pbmobile.app
-    // (Kecuali kalau kamu mau test manual di browser, bisa dikondisikan)
-    if (!referer.includes('pbmobile.app')) {
+    const secretHeader = req.headers['x-extension-auth'];
+    const MY_SECRET = 'IrilModzGacorAbis2026';
+
+    if (secretHeader !== MY_SECRET) {
       return res.status(403).send('//DENIED');
     }
 
