@@ -3,6 +3,14 @@ const path = require('path');
 
 module.exports = (req, res) => {
   try {
+    // Tentukan token rahasia kamu di sini (bebas diganti sesukamu)
+    const SECRET_KEY = 'fan';
+    
+    // Cek apakah yang mengakses membawa token yang benar di URL (?key=...)
+    if (req.query.key !== SECRET_KEY) {
+      return res.status(403).send('Akses ditolak! Token salah.');
+    }
+
     const filePath = path.join(process.cwd(), 'public', 'script.js');
     const coreCode = fs.readFileSync(filePath, 'utf8');
 
