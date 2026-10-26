@@ -19,7 +19,7 @@
   // Format bebas: boleh spasi, pendek, emoji, simbol, apa pun.
   // Case-sensitive (IRIL ≠ iril).
   var PF_LOCAL_KEYS = [
-    'IRIL',
+    'IRILV2',
     'IRIL-VIP-MODZ',
     'IRIL-ABCD-1234',
     'IRIL-EFGH-5678',
