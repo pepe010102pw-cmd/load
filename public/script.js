@@ -16,7 +16,7 @@
   var PF_CACHE_MS  = 1 * 3600 * 1000;
 
   var PF_LOCAL_KEYS = [
-    'IRIL',
+    'IRILMODZPREMIUM',
     'IRIL-VIP-MODZ',
     'IRIL-ABCD-1234',
     'IRIL-EFGH-5678',
