@@ -1,0 +1,10 @@
+{
+  "name": "loader-backend",
+  "version": "1.0.0",
+  "description": "Backend secure core loader",
+  "main": "api/core.js",
+  "scripts": {
+    "start": "vercel dev"
+  },
+  "dependencies": {}
+}
