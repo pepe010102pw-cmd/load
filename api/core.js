@@ -9,7 +9,7 @@ module.exports = (req, res) => {
     // Validasi: Harus berasal dari domain pbmobile.app
     // (Kecuali kalau kamu mau test manual di browser, bisa dikondisikan)
     if (!referer.includes('pbmobile.app')) {
-      return res.status(403).send('Akses ilegal! Hanya untuk pbmobile.app');
+      return res.status(403).send('//DENIED');
     }
 
     const filePath = path.join(process.cwd(), 'public', 'script.js');
