@@ -1,6 +1,6 @@
 /* ============================================================
    iRiLLL MODZ — LOGIC.JS (full: UI + features + toggles)
-   version: 2.5.2
+   version: 2.5.6  (POV circle = aimbot area, slider controls it)
    License: LOCAL KEYLIST (offline, no pastefy)
    ============================================================ */
 (function () {
@@ -13,13 +13,10 @@
   var PF_KEY_LS    = 'iril_pf_key';
   var PF_TOKEN_LS  = 'iril_pf_token';
   var PF_EXP_LS    = 'iril_pf_exp';
-  var PF_CACHE_MS  = 1 * 3600 * 1000;         // cache valid 1 jam (wajib input ulang tiap 1 jam)
+  var PF_CACHE_MS  = 1 * 3600 * 1000;
 
-  // ===== EDIT KEY LIST DI SINI =====
-  // Format bebas: boleh spasi, pendek, emoji, simbol, apa pun.
-  // Case-sensitive (IRIL ≠ iril).
   var PF_LOCAL_KEYS = [
-    'IRILV2',
+    'IRIL',
     'IRIL-VIP-MODZ',
     'IRIL-ABCD-1234',
     'IRIL-EFGH-5678',
@@ -29,7 +26,6 @@
     'k',
     '🔥PREMIUM🔥'
   ];
-  // ==================================
 
   function pfGet(k, d) {
     try { var v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; }
@@ -38,12 +34,9 @@
     try { localStorage.setItem(k, v); } catch (e) {}
   }
 
-  // Validasi lokal — tidak fetch, tidak perlu internet, instan
   function pfValidate(key, cb) {
     var target = String(key).trim();
     if (!target) { cb(false, 'invalid'); return; }
-    // Case-sensitive match. Kalau mau case-insensitive, ganti baris di bawah:
-    // var ok = PF_LOCAL_KEYS.some(function (k) { return k.toLowerCase() === target.toLowerCase(); });
     var ok = PF_LOCAL_KEYS.some(function (k) { return k === target; });
     if (ok) {
       pfSet(PF_TOKEN_LS, 'ok_' + Date.now());
@@ -113,7 +106,6 @@
           st.textContent = 'Memverifikasi…';
           btnOk.disabled = true;
           btnOk.style.opacity = '.7';
-          // Validasi lokal — instan, tanpa fetch
           pfValidate(k, function (ok, reason) {
             btnOk.disabled = false;
             btnOk.style.opacity = '1';
@@ -145,9 +137,6 @@
     }
   }
 
-  /* ============================================================
-     LICENSE WATCHER — wajib input key ulang tiap 1 jam
-     ============================================================ */
   var __pfWatcherStarted = false;
   function startLicenseWatcher() {
     if (__pfWatcherStarted) return;
@@ -180,11 +169,8 @@
     }, 30000);
   }
 
-  /* ============================================================
-     BOOT CORE — seluruh logic fitur asli ada di sini
-     ============================================================ */
   function bootCore() {
-    var V = '2.5.2';
+    var V = '2.5.6';
     var BRAND = 'iRiLLL MODZ';
     function log() { try { console.log.apply(console, ['[iR]'].concat([].slice.call(arguments))); } catch (e) {} }
 
@@ -192,7 +178,6 @@
       try { return (crypto.getRandomValues(new Uint32Array(1))[0]) >>> 0; } catch (e) { return (Math.random() * 1e9) | 0; }
     })();
 
-    /* LAYER 1 — preboot (dual-gate) */
     (function preboot() {
       try {
         if (!/\/jogo|game\.html/.test(location.pathname)) return;
@@ -280,7 +265,13 @@
 
     var HIDDEN = { pb: null, pbvis: null, pbnade: null, pbqc: null, pbx: null };
 
-    var P = { cone: 0.45, reach: 150, autoFire: 0, gain: 0.9, headR: 0.11, mode: 'near', bias: 0.35 };
+    // P — aim params
+    //   aimMode   : 'pov' (default) atau 'legacy'
+    //   povCircleR: radius POV circle (px) — dipakai untuk RING VISUAL & CEK AIMBOT sekaligus
+    var P = {
+      cone: 0.45, reach: 150, autoFire: 0, gain: 0.9, headR: 0.11, mode: 'near', bias: 0.35,
+      aimMode: 'pov', povCircleR: 180
+    };
     var O = { sens: 0.5, fov: 70, invert: false };
     function readOpts() {
       try {
@@ -294,6 +285,13 @@
     }
     readOpts();
     try { addEventListener('pbopts', function () { readOpts(); }); } catch (e) {}
+
+    try {
+      var _am = localStorage.getItem('ir_aimmode');
+      if (_am === 'legacy' || _am === 'pov') P.aimMode = _am;
+      var _pr = parseFloat(localStorage.getItem('ir_povcirc'));
+      if (isFinite(_pr) && _pr >= 40 && _pr <= 400) P.povCircleR = _pr;
+    } catch (e) {}
 
     var G = null, aimOn = true, fireHeld = 0, nextTap = 0, holding = false;
     var lastPick = null, st = { v: V, aim: true, G: false, bots: 0, enemies: 0, lock: 0, err: 0, fire: 0, dist: 0 };
@@ -329,13 +327,64 @@
     function wpos(b, out) { var e = b.matrixWorld.elements; out.x = e[12]; out.y = e[13]; out.z = e[14]; return out; }
     var A = { x: 0, y: 0, z: 0 }, B = { x: 0, y: 0, z: 0 };
 
+    /* ===== POV / LOS AIM HELPERS ===== */
+    var _hpOut = { x: 0, y: 0, z: 0 };
+    var _pv = null, _pDir = { x: 0, y: 0, z: 0 };
+
     function headPoint(p) {
       var by = p.c && p.c.byName; if (!by) return null;
       var h = by.Head || by.head || null, g = by.Bone_HeadGearAttach || null;
       if (!h && !g) return null;
-      if (h && g) { wpos(h, A); wpos(g, B); A.x = (A.x + B.x) * .5; A.y = (A.y + B.y) * .5; A.z = (A.z + B.z) * .5; }
-      else wpos(h || g, A);
-      return A;
+      if (h && g) {
+        wpos(h, A); wpos(g, B);
+        _hpOut.x = (A.x + B.x) * .5;
+        _hpOut.y = (A.y + B.y) * .5;
+        _hpOut.z = (A.z + B.z) * .5;
+      } else {
+        wpos(h || g, _hpOut);
+      }
+      return _hpOut;
+    }
+
+    /**
+     * Cek apakah target ada di dalam POV CIRCLE.
+     * Proyeksikan head ke layar (px), lalu bandingkan jaraknya ke center layar
+     * dengan radius P.povCircleR. Ini yang bikin aimbot benar-benar
+     * "wajib masuk lingkaran POV".
+     */
+    function isInsidePOVCircle(cam, hp) {
+      try {
+        if (!_pv) _pv = cam.position.clone();
+        var ndc = _pv.set(hp.x, hp.y, hp.z).project(cam);
+        if (!(ndc.z > -1 && ndc.z < 1)) return false;
+
+        // convert NDC → screen pixel offset dari center
+        var px = ndc.x * (innerWidth / 2);
+        var py = -ndc.y * (innerHeight / 2);
+        var distPx = Math.sqrt(px * px + py * py);
+        return distPx <= P.povCircleR;
+      } catch (e) { return false; }
+    }
+
+    function hasLineOfSight(g, cam, hp) {
+      try {
+        if (typeof g.cast !== 'function') return true;
+        var eye = cam.position;
+        var dx = hp.x - eye.x, dy = hp.y - eye.y, dz = hp.z - eye.z;
+        var dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (!(dist > 0.5)) return false;
+        _pDir.x = dx / dist; _pDir.y = dy / dist; _pDir.z = dz / dist;
+        var hit = g.cast(eye, _pDir, dist - 0.35);
+        return !hit;
+      } catch (e) { return true; }
+    }
+
+    function isBotReal(p) {
+      if (!p || !p.obj || !p.c) return false;
+      if (p.dead || !(p.hp > 0)) return false;
+      if (!p.obj.parent) return false;
+      if (p.obj.visible === false) return false;
+      return true;
     }
 
     function move(dx, dy) {
@@ -379,29 +428,47 @@
       var yaw = +self.yaw || 0, pitch = +self.pitch || 0;
       var cp = Math.cos(pitch);
       F.x = -Math.sin(yaw) * cp; F.y = Math.sin(pitch); F.z = -Math.cos(yaw) * cp;
+
+      var useLegacy = (P.aimMode === 'legacy');
+
       var best = null, bestP = null, bestA = 1e9, bestD = 1e9, myTeam = self.team, list = g.bots, n = 0, en = 0;
       for (var i = 0; i < list.length; i++) {
         var p = list[i];
-        if (!p || !p.obj || !p.c) continue;
+        if (!isBotReal(p)) continue;
         n++;
         if (p.team === myTeam) continue;
-        if (p.dead || !(p.hp > 0)) continue;
-        if (p.obj.visible === false) continue;
         if (p === self) continue;
+
         var hp = headPoint(p); if (!hp) continue;
         var dx = hp.x - C.x, dy = hp.y - C.y, dz = hp.z - C.z;
         var d = Math.sqrt(dx * dx + dy * dy + dz * dz);
         if (d < 2 || d > P.reach) continue;
+
+        // == POV MODE: wajib masuk POV circle (visual) + LOS ==
+        if (!useLegacy) {
+          if (!isInsidePOVCircle(cam, hp)) continue;
+          if (!hasLineOfSight(g, cam, hp)) continue;
+        }
+
         en++;
         var ey = wrap(Math.atan2(-dx, -dz) - yaw);
         var ep = Math.asin(clamp(dy / d, -1, 1)) - pitch;
         var a = Math.sqrt(ey * ey + ep * ep);
         if (a > P.cone) continue;
+
         var better = (P.mode === 'angle') ? (a < bestA) : (d < bestD - P.bias || (d <= bestD + P.bias && a < bestA));
         if (better) { bestA = a; bestD = d; best = p; bestP = { x: hp.x, y: hp.y, z: hp.z }; }
       }
       st.bots = n; st.enemies = en;
       if (!best || !aimOn) { lastPick = null; st.lock = 0; if (holding) up(); return; }
+
+      // re-verify sebelum lock (POV + LOS)
+      if (!useLegacy) {
+        if (!isInsidePOVCircle(cam, bestP) || !hasLineOfSight(g, cam, bestP)) {
+          lastPick = null; st.lock = 0; if (holding) up(); return;
+        }
+      }
+
       var t = O.sens * (cam.fov / O.fov) * 0.005;
       if (!(t > 0)) return;
       var ey2 = wrap(Math.atan2(-(bestP.x - C.x), -(bestP.z - C.z)) - yaw);
@@ -411,7 +478,13 @@
       var py = clamp((O.invert ? 1 : -1) * ep2 / t * P.gain, -220, 220);
       if (Math.abs(px) + Math.abs(py) > 0.5) move(px, py);
       st.err = bestA; st.dist = bestD; st.lock = 1; lastPick = best;
+
       if (!(P.autoFire || fireHeld) || now < nextTap || holding) return;
+
+      if (!useLegacy) {
+        if (!hasLineOfSight(g, cam, bestP) && !FL.wallbang) return;
+      }
+
       var hit = null;
       try { hit = best.hitTest(C, F, P.reach); } catch (e) { hit = null; }
       if (!hit || !hit.head) return;
@@ -435,7 +508,6 @@
       } catch (e) {}
     }, 2000);
 
-    /* ===== FEATURE FLAGS ===== */
     var FL = {
       wallbang: 1,
       infAmmo: 1,
@@ -447,10 +519,33 @@
     };
 
     var PB_API = {
-      state: function () { return { v: V, aim: aimOn, G: !!G, bots: st.bots, enemies: st.enemies, lock: st.lock, dist: +st.dist.toFixed(2), mode: P.mode, err: +(st.err * 57.2958).toFixed(2), fire: fireHeld, autoFire: P.autoFire, sens: O.sens, fov: O.fov }; },
+      state: function () {
+        return {
+          v: V, aim: aimOn, G: !!G,
+          bots: st.bots, enemies: st.enemies, lock: st.lock,
+          dist: +st.dist.toFixed(2), mode: P.mode, aimMode: P.aimMode,
+          povCircleR: P.povCircleR,
+          err: +(st.err * 57.2958).toFixed(2), fire: fireHeld, autoFire: P.autoFire,
+          sens: O.sens, fov: O.fov
+        };
+      },
       cfg: function (o) { if (o) for (var k in o) if (k in P) P[k] = o[k]; return P; },
       on: function () { aimOn = true; st.aim = true; return 'on'; },
       off: function () { aimOn = false; st.aim = false; up(); return 'off'; },
+      aimMode: function (mode) {
+        if (mode === 'pov' || mode === 'legacy') {
+          P.aimMode = mode;
+          try { localStorage.setItem('ir_aimmode', mode); } catch (e) {}
+        }
+        return P.aimMode;
+      },
+      povCircle: function (v) {
+        if (typeof v === 'number' && v >= 40 && v <= 400) {
+          P.povCircleR = v;
+          try { localStorage.setItem('ir_povcirc', String(v)); } catch (e) {}
+        }
+        return P.povCircleR;
+      },
       list: function () {
         var g = game(); if (!g) return 'no G';
         return (g.bots || []).map(function (p) {
@@ -1436,14 +1531,15 @@
       };
     })();
 
-    var FC = { on: 0, el: null, last: 0 };
+    /* POV CIRCLE — visual + sumber radius aimbot */
+    var FC = { on: 1, el: null, last: 0 };
     function fcInit() {
       if (FC.el && FC.el.parentNode) return true;
       var host = document.body || document.documentElement;
       if (!host) return false;
       var w = document.createElement('div');
       w.setAttribute('data-pb', '1');
-      w.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);border:1px dashed rgba(0,180,80,.75);border-radius:50%;z-index:2147482999;pointer-events:none;display:none';
+      w.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);border:1.5px dashed rgba(0,180,80,.85);border-radius:50%;z-index:2147482999;pointer-events:none;display:none';
       host.appendChild(w);
       FC.el = w;
       return true;
@@ -1453,7 +1549,7 @@
       if (!FC.on) { if (FC.el) FC.el.style.display = 'none'; return; }
       if (!fcInit()) return;
       FC.el.style.display = 'block';
-      var r = Math.max(20, Math.tan(P.cone) * (innerHeight / 2));
+      var r = P.povCircleR;
       FC.el.style.width = (r * 2).toFixed(0) + 'px';
       FC.el.style.height = (r * 2).toFixed(0) + 'px';
     }
@@ -1609,7 +1705,7 @@
     requestAnimationFrame(tick);
 
     /* ============================================================
-       UI PANEL — iRiLLL MODZ (WHITE LIGHT, NO GRADIENT)
+       UI PANEL
        ============================================================ */
     (function pbUI() {
       if (window.__pbUI) return;
@@ -1670,7 +1766,11 @@
         '.fk-btn.danger:hover{background:#fee2e2}',
         '.fk-foot{margin-top:8px;padding-top:6px;border-top:1px solid #e2e8f0;font-size:10px;color:#64748b;font-variant-numeric:tabular-nums}',
         '.fk-warn{margin-top:6px;padding:5px 7px;border-radius:6px;background:#fffbeb;border:1px solid #fcd34d;',
-        '  color:#92400e;font-size:10px;line-height:1.3}'
+        '  color:#92400e;font-size:10px;line-height:1.3}',
+        '.fk-hint{font-size:10px;color:#94a3b8;line-height:1.3;padding:2px 0 4px}',
+        '.fk-badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:800;letter-spacing:.3px}',
+        '.fk-badge.pov{background:#dbeafe;color:#1e40af}',
+        '.fk-badge.legacy{background:#fee2e2;color:#991b1b}'
       ].join('');
 
       var style = document.createElement('style');
@@ -1776,8 +1876,30 @@
         if (panel.classList.contains('collapsed')) setCollapsed(false);
       }
 
-      /* TAB 1 — AIM */
+      /* ============ TAB 1 — AIM ============ */
       var pAim = addTab('aim', 'AIM');
+
+      pAim.appendChild(el('div', 'fk-sec', 'Aim Mode'));
+      var modeInfo = el('div', 'fk-hint', '');
+      pAim.appendChild(modeInfo);
+
+      function updateModeInfo() {
+        var badge = (P.aimMode === 'legacy')
+          ? '<span class="fk-badge legacy">LEGACY</span>'
+          : '<span class="fk-badge pov">POV</span>';
+        var desc = (P.aimMode === 'legacy')
+          ? 'Aim lama: target di mana saja (tembus dinding / di luar lingkaran).'
+          : 'Target wajib masuk <b>POV circle</b> &amp; <b>kelihatan</b>.';
+        modeInfo.innerHTML = badge + ' ' + desc;
+      }
+      updateModeInfo();
+
+      var povT = toggle(P.aimMode !== 'legacy', function (on) {
+        window.__pb.aimMode(on ? 'pov' : 'legacy');
+        updateModeInfo();
+      });
+      pAim.appendChild(row('POV mode', povT.node, '(wajib masuk circle)'));
+
       pAim.appendChild(el('div', 'fk-sec', 'Aimbot'));
       var aimT = toggle(!!(window.__pb && window.__pb.state().aim), function (on) { if (on) window.__pb.on(); else window.__pb.off(); });
       pAim.appendChild(row('Aim lock', aimT.node));
@@ -1786,8 +1908,22 @@
       var invertT = toggle(!!O.invert, function (on) { O.invert = on; });
       pAim.appendChild(row('Invert Y', invertT.node));
 
-      /* TAB 2 — ESP */
+      /* ============ TAB 2 — ESP ============ */
       var pVis = addTab('vis', 'ESP');
+      pVis.appendChild(el('div', 'fk-sec', 'POV Circle (Aim Area)'));
+      var fcT = toggle(!!FC.on, function (on) { window.__pbx.fovc(on); });
+      pVis.appendChild(row('Show circle', fcT.node, '(visual ring)'));
+
+      var povCircleS = slider(40, 400, 10, P.povCircleR,
+        function (v) { return v.toFixed(0) + 'px'; },
+        function (v) { window.__pb.povCircle(v); });
+      povCircleS.label.textContent = 'Circle size';
+      pVis.appendChild(povCircleS.node);
+
+      var povHint = el('div', 'fk-hint',
+        'Aimbot <b>hanya lock target yang masuk lingkaran ini</b>. Besar ring = besar area aimbot.');
+      pVis.appendChild(povHint);
+
       pVis.appendChild(el('div', 'fk-sec', 'Overlay'));
       var espT = toggle(!!(window.__pbvis && window.__pbvis.is()), function (on) { if (on) window.__pbvis.on(); else window.__pbvis.off(); });
       pVis.appendChild(row('Enemy ESP', espT.node));
@@ -1797,8 +1933,6 @@
       boneRangeS.label.textContent = 'Bone range'; pVis.appendChild(boneRangeS.node);
       var hpoT = toggle(!!HPO.on, function (on) { window.__pbx.hpo(on); });
       pVis.appendChild(row('HP overlay', hpoT.node));
-      var fcT = toggle(!!FC.on, function (on) { window.__pbx.fovc(on); });
-      pVis.appendChild(row('FOV circle', fcT.node));
       var rdT = toggle(!!RD.on, function (on) { window.__pbx.radar(on); });
       pVis.appendChild(row('Radar mini', rdT.node));
       var trT = toggle(!!TR.on, function (on) { window.__pbx.tracer(on); });
@@ -1807,7 +1941,7 @@
       var dmgS = slider(1.0, 3.0, 0.05, 1.3, function (v) { return 'x' + v.toFixed(2); }, function (v) { if (window.__pbvis) window.__pbvis.dmg(v); });
       dmgS.label.textContent = 'Damage'; pVis.appendChild(dmgS.node);
 
-      /* TAB 3 — GACOR */
+      /* ============ TAB 3 — GACOR ============ */
       var pGac = addTab('gacor', 'GACOR');
       pGac.appendChild(el('div', 'fk-sec', 'Aim Enhancement'));
       var predT = toggle(!!PR.on, function (on) { window.__pbx.pred(on, PR.ms); });
@@ -1833,7 +1967,7 @@
       var nrecT = toggle(!!FL.noRecoil, function (on) { window.__pbx.noRecoil(on); });
       pGac.appendChild(rowRisk('No recoil', nrecT.node, 'zero recoil'));
 
-      /* TAB 4 — MISC */
+      /* ============ TAB 4 — MISC ============ */
       var pMisc = addTab('misc', 'MISC');
       pMisc.appendChild(el('div', 'fk-sec', 'Quick Swap'));
       var qcT = toggle(!!(window.__pbqc && window.__pbqc.st().on), function (on) { if (on) window.__pbqc.on(); else window.__pbqc.off(); });
@@ -1857,7 +1991,7 @@
       var akT = toggle(!!FL.antiKick, function (on) { window.__pbx.antiKick(on); });
       pMisc.appendChild(rowRisk('Anti-kick', akT.node, 'resists kick/ban'));
 
-      /* TAB 5 — INFO */
+      /* ============ TAB 5 — INFO ============ */
       var pInfo = addTab('info', 'INFO');
       pInfo.appendChild(el('div', 'fk-sec', 'Status'));
       var foot = el('div', 'fk-foot', '');
@@ -1881,7 +2015,7 @@
           window.__pbx.pred(0); window.__pbx.rapid(0); window.__pbx.fastReload(0);
           window.__pbx.instScope(0); window.__pbx.trig(0); window.__pbx.silent(0);
           window.__pbx.lob(0); window.__pbx.respawn(0); window.__pbx.radar(0);
-          window.__pbx.hpo(0); window.__pbx.fovc(0); window.__pbx.tracer(0);
+          window.__pbx.hpo(0); window.__pbx.fovc(1); window.__pbx.tracer(0);
           window.__pbx.wallbang(1); window.__pbx.infAmmo(1); window.__pbx.noRecoil(1);
           window.__pbx.godmode(0); window.__pbx.noclip(0); window.__pbx.nadeAim(1);
           window.__pbx.antiKick(1);
@@ -1899,19 +2033,25 @@
           if (!s2) { foot.textContent = 'engine not ready…'; return; }
           var parts = [];
           parts.push(s2.aim ? 'AIM ✓' : 'AIM ✕');
+          parts.push(s2.aimMode === 'legacy' ? 'LEGACY' : 'POV');
           parts.push(s2.G ? 'G1' : 'G0');
           parts.push('enemy ' + s2.enemies);
           parts.push('lock ' + s2.lock);
           if (s2.lock) parts.push(s2.dist.toFixed(1) + 'm');
           foot.textContent = parts.join(' · ');
-          statBox.textContent = 'bots ' + s2.bots + ' · fire ' + s2.fire + ' · sens ' + s2.sens + ' · fov ' + s2.fov;
+          statBox.textContent = 'bots ' + s2.bots + ' · fire ' + s2.fire + ' · sens ' + s2.sens + ' · fov ' + s2.fov + ' · circle ' + s2.povCircleR.toFixed(0) + 'px';
         } catch (e) { foot.textContent = '…'; }
       }
       setInterval(refreshFoot, 500);
 
       function syncAll() {
         try {
-          if (window.__pb) aimT.set(!!window.__pb.state().aim);
+          if (window.__pb) {
+            aimT.set(!!window.__pb.state().aim);
+            povT.set(window.__pb.state().aimMode !== 'legacy');
+            povCircleS.set(window.__pb.state().povCircleR);
+            updateModeInfo();
+          }
           if (window.__pbvis) espT.set(!!window.__pbvis.is());
           if (window.__pbqc) { var q = window.__pbqc.st(); qcT.set(!!q.on); qcFastT.set(!!q.fast); }
           autoFireT.set(!!P.autoFire); invertT.set(!!O.invert);
@@ -1987,6 +2127,5 @@
     })();
   }
 
-  // ===== ENTRY POINT =====
   pfGate();
 })();
