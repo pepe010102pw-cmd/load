@@ -1,6 +1,6 @@
 /* ============================================================
-   iRiLLL MODZ — LOGIC.JS (full: UI + features + toggles)
-   version: 2.5.7  (Hitbox selector: head / body / nearest)
+   iRiLLL MODZ — LOGIC.JS
+   version: 2.6.1  (minimal UI + smooth fire + aimbot re-acquire)
    License: LOCAL KEYLIST (offline, no pastefy)
    ============================================================ */
 (function () {
@@ -8,7 +8,7 @@
   if (window.__pb) return;
 
   /* ============================================================
-     LICENSE GATE — LOCAL KEYLIST (tanpa pastefy / online)
+     LICENSE GATE — LOCAL KEYLIST
      ============================================================ */
   var PF_KEY_LS    = 'iril_pf_key';
   var PF_TOKEN_LS  = 'iril_pf_token';
@@ -16,37 +16,20 @@
   var PF_CACHE_MS  = 1 * 3600 * 1000;
 
   var PF_LOCAL_KEYS = [
-    'IRILMODZPREMIUM',
-    'IRIL-VIP-MODZ',
-    'IRIL-ABCD-1234',
-    'IRIL-EFGH-5678',
-    'IRIL-IJKL-9012',
-    'my key 123',
-    'abc',
-    'k',
-    '🔥PREMIUM🔥'
+    'IRILMODZPREMIUM','IRIL-VIP-MODZ','IRIL-ABCD-1234','IRIL-EFGH-5678','IRIL-IJKL-9012',
+    'my key 123','abc','k','🔥PREMIUM🔥'
   ];
 
-  function pfGet(k, d) {
-    try { var v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; }
-  }
-  function pfSet(k, v) {
-    try { localStorage.setItem(k, v); } catch (e) {}
-  }
+  function pfGet(k, d) { try { var v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } }
+  function pfSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 
   function pfValidate(key, cb) {
     var target = String(key).trim();
     if (!target) { cb(false, 'invalid'); return; }
     var ok = PF_LOCAL_KEYS.some(function (k) { return k === target; });
-    if (ok) {
-      pfSet(PF_TOKEN_LS, 'ok_' + Date.now());
-      pfSet(PF_EXP_LS, String(Date.now() + PF_CACHE_MS));
-      cb(true);
-    } else {
-      cb(false, 'invalid');
-    }
+    if (ok) { pfSet(PF_TOKEN_LS, 'ok_' + Date.now()); pfSet(PF_EXP_LS, String(Date.now() + PF_CACHE_MS)); cb(true); }
+    else cb(false, 'invalid');
   }
-
   function pfCacheValid() {
     var tok = pfGet(PF_TOKEN_LS, '');
     var exp = parseInt(pfGet(PF_EXP_LS, '0'), 10) || 0;
@@ -59,61 +42,44 @@
         var wrap = document.createElement('div');
         wrap.setAttribute('data-pf-prompt', '1');
         wrap.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:2147483647;display:flex;align-items:center;justify-content:center;font:13px/1.4 system-ui,Tahoma,sans-serif';
-
         var box = document.createElement('div');
         box.style.cssText = 'background:#fff;border-radius:12px;padding:18px 18px 14px;width:min(340px,90vw);box-shadow:0 20px 50px rgba(0,0,0,.35);color:#0f172a';
-
         var t = document.createElement('div');
         t.textContent = title;
         t.style.cssText = 'font-weight:800;font-size:14px;margin-bottom:6px;color:#7c3aed';
-
         var m = document.createElement('div');
         m.textContent = msg;
         m.style.cssText = 'color:#475569;margin-bottom:10px;font-size:12px;line-height:1.5';
-
         var inp = document.createElement('input');
-        inp.type = 'text';
-        inp.placeholder = 'Masukkan License Key';
+        inp.type = 'text'; inp.placeholder = 'Masukkan License Key';
         inp.style.cssText = 'width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #cbd5e1;border-radius:8px;font:13px monospace;outline:none';
-
         var row = document.createElement('div');
         row.style.cssText = 'display:flex;gap:8px;margin-top:12px';
-
         var btnOk = document.createElement('button');
         btnOk.textContent = 'Aktifkan';
         btnOk.style.cssText = 'flex:1;padding:9px 0;border:0;border-radius:8px;background:#7c3aed;color:#fff;font-weight:800;cursor:pointer;font-size:12px';
-
         var btnNo = document.createElement('button');
         btnNo.textContent = 'Batal';
         btnNo.style.cssText = 'flex:0 0 84px;padding:9px 0;border:1px solid #cbd5e1;border-radius:8px;background:#f1f5f9;color:#334155;font-weight:700;cursor:pointer;font-size:12px';
-
         var st = document.createElement('div');
         st.style.cssText = 'margin-top:8px;font-size:11px;color:#b91c1c;min-height:14px';
-
         row.appendChild(btnOk); row.appendChild(btnNo);
         box.appendChild(t); box.appendChild(m); box.appendChild(inp);
         box.appendChild(row); box.appendChild(st);
         wrap.appendChild(box);
         (document.body || document.documentElement).appendChild(wrap);
         setTimeout(function () { try { inp.focus(); } catch (e) {} }, 60);
-
         function close() { try { wrap.remove(); } catch (e) {} }
         btnNo.addEventListener('click', function () { close(); cb(null); });
         function submit() {
           var k = (inp.value || '').trim();
           if (!k) { st.style.color = '#b91c1c'; st.textContent = 'Key tidak boleh kosong'; return; }
-          st.style.color = '#7c3aed';
-          st.textContent = 'Memverifikasi…';
-          btnOk.disabled = true;
-          btnOk.style.opacity = '.7';
-          pfValidate(k, function (ok, reason) {
-            btnOk.disabled = false;
-            btnOk.style.opacity = '1';
+          st.style.color = '#7c3aed'; st.textContent = 'Memverifikasi…';
+          btnOk.disabled = true; btnOk.style.opacity = '.7';
+          pfValidate(k, function (ok) {
+            btnOk.disabled = false; btnOk.style.opacity = '1';
             if (ok) { pfSet(PF_KEY_LS, k); close(); cb(k); }
-            else {
-              st.style.color = '#b91c1c';
-              st.textContent = 'Key tidak valid';
-            }
+            else { st.style.color = '#b91c1c'; st.textContent = 'Key tidak valid'; }
           });
         }
         btnOk.addEventListener('click', submit);
@@ -141,15 +107,13 @@
   function startLicenseWatcher() {
     if (__pfWatcherStarted) return;
     __pfWatcherStarted = true;
-
     setInterval(function () {
       try {
         if (pfCacheValid()) return;
         var existing = document.querySelector('div[data-pf-prompt="1"]');
         if (existing) return;
         try { if (window.__pb && window.__pb.off) window.__pb.off(); } catch (e) {}
-        pfPrompt(
-          'License Expired',
+        pfPrompt('License Expired',
           'Sesi 1 jam kamu sudah habis. Masukkan License Key lagi untuk melanjutkan.',
           function (k) {
             if (k) {
@@ -157,26 +121,17 @@
               __pfWatcherStarted = false;
               startLicenseWatcher();
             } else {
-              setTimeout(function () {
-                if (!pfCacheValid()) {
-                  try { startLicenseWatcher(); } catch (e) {}
-                }
-              }, 5000);
+              setTimeout(function () { if (!pfCacheValid()) { try { startLicenseWatcher(); } catch (e) {} } }, 5000);
             }
-          }
-        );
+          });
       } catch (e) {}
     }, 30000);
   }
 
   function bootCore() {
-    var V = '2.5.7';
+    var V = '2.6.1';
     var BRAND = 'iRiLLL MODZ';
     function log() { try { console.log.apply(console, ['[iR]'].concat([].slice.call(arguments))); } catch (e) {} }
-
-    var SEED = (function () {
-      try { return (crypto.getRandomValues(new Uint32Array(1))[0]) >>> 0; } catch (e) { return (Math.random() * 1e9) | 0; }
-    })();
 
     (function preboot() {
       try {
@@ -198,15 +153,12 @@
         var bm = /src="([^"]*\/static\/game\/bundle\.js[^"]*)"/.exec(html);
         if (!bm) return;
         var bsrc = xget(new URL(bm[1], location.href).href, '*/*');
-
         var gateJi = /ji\s*=\s*"localhost"===location\.hostname\|\|"127\.0\.0\.1"===location\.hostname\|\|"\[::1\]"===location\.hostname/;
         var gateUi = /const Ui="localhost"===location\.hostname\|\|"127\.0\.0\.1"===location\.hostname\|\|"\[::1\]"===location\.hostname,/;
-
         var patched = false;
         if (gateJi.test(bsrc)) { bsrc = bsrc.replace(gateJi, 'ji=!0'); patched = true; log('gate ji= matched'); }
         else if (gateUi.test(bsrc)) { bsrc = bsrc.replace(gateUi, 'const Ui=!0,'); patched = true; log('gate Ui= matched (legacy)'); }
         if (!patched) { log('gate tidak cocok, abort'); return; }
-
         var parsed = new DOMParser().parseFromString(html, 'text/html');
         var scripts = [].slice.call(parsed.querySelectorAll('script')).map(function (s) {
           return { src: s.getAttribute('src'), text: s.textContent, type: s.getAttribute('type') || '' };
@@ -268,7 +220,10 @@
     var P = {
       cone: 0.45, reach: 150, autoFire: 0, gain: 0.9, headR: 0.11, mode: 'near', bias: 0.35,
       aimMode: 'pov', povCircleR: 180,
-      hitbox: 'head' // 'head', 'body', 'nearest'
+      hitbox: 'head',
+      aimbotOn: 0,
+      aimbotGain: 1.1,
+      aimbotHoldMs: 250
     };
     var O = { sens: 0.5, fov: 70, invert: false };
     function readOpts() {
@@ -288,13 +243,22 @@
       var _am = localStorage.getItem('ir_aimmode');
       if (_am === 'legacy' || _am === 'pov') P.aimMode = _am;
       var _pr = parseFloat(localStorage.getItem('ir_povcirc'));
-      if (isFinite(_pr) && _pr >= 40 && _pr <= 400) P.povCircleR = _pr;
+      if (isFinite(_pr) && _pr >= 40) P.povCircleR = _pr;
       var _hb = localStorage.getItem('ir_hitbox');
       if (_hb === 'head' || _hb === 'body' || _hb === 'nearest') P.hitbox = _hb;
+      var _ab = localStorage.getItem('ir_aimbot');
+      if (_ab === '1' || _ab === '0') P.aimbotOn = +_ab;
+      var _abg = parseFloat(localStorage.getItem('ir_aimbot_gain'));
+      if (isFinite(_abg) && _abg > 0) P.aimbotGain = _abg;
+      var _abh = parseFloat(localStorage.getItem('ir_aimbot_hold'));
+      if (isFinite(_abh) && _abh >= 50) P.aimbotHoldMs = _abh;
     } catch (e) {}
 
-    var G = null, aimOn = true, fireHeld = 0, nextTap = 0, holding = false;
-    var lastPick = null, st = { v: V, aim: true, G: false, bots: 0, enemies: 0, lock: 0, err: 0, fire: 0, dist: 0, hitbox: P.hitbox };
+    var G = null, aimOn = false, fireHeld = 0, nextTap = 0, holding = false;
+    var lastPick = null, st = { v: V, aim: false, G: false, bots: 0, enemies: 0, lock: 0, err: 0, fire: 0, dist: 0, hitbox: P.hitbox, aimbot: 0 };
+
+    var AB = { lockUntil: 0, target: null, lastShot: 0, freshFire: 0 };
+    var SF = { on: 1 }; // Smooth fire toggle
 
     var DBG = { el: null, n: 0 };
     function dbg(t) {
@@ -336,15 +300,10 @@
       if (!h && !g) return null;
       if (h && g) {
         wpos(h, A); wpos(g, B);
-        _hpOut.x = (A.x + B.x) * .5;
-        _hpOut.y = (A.y + B.y) * .5;
-        _hpOut.z = (A.z + B.z) * .5;
-      } else {
-        wpos(h || g, _hpOut);
-      }
+        _hpOut.x = (A.x + B.x) * .5; _hpOut.y = (A.y + B.y) * .5; _hpOut.z = (A.z + B.z) * .5;
+      } else { wpos(h || g, _hpOut); }
       return _hpOut;
     }
-
     function bodyPoint(p) {
       var by = p.c && p.c.byName; if (!by) return null;
       var h = by.Spine2 || by.Spine1 || by.Pelvis || by.Neck;
@@ -352,30 +311,18 @@
       wpos(h, _hpOut);
       return _hpOut;
     }
-
     function getTargetPoint(p) {
       var by = p.c && p.c.byName; if (!by) return null;
       if (P.hitbox === 'head') return headPoint(p);
       if (P.hitbox === 'body') return bodyPoint(p);
-      
-      // Nearest: Cek jarak dari crosshair kamera saat ini (C) ke head atau body
-      var hp = headPoint(p);
-      var bp = bodyPoint(p);
-      if (!hp) return bp;
-      if (!bp) return hp;
-
-      // Ambil FOV cone jarak (proyeksi 2D)
+      var hp = headPoint(p); var bp = bodyPoint(p);
+      if (!hp) return bp; if (!bp) return hp;
       var hx = hp.x - C.x, hy = hp.y - C.y, hz = hp.z - C.z;
       var hd = Math.sqrt(hx*hx + hy*hy + hz*hz);
       var bx = bp.x - C.x, by2 = bp.y - C.y, bz = bp.z - C.z;
       var bd = Math.sqrt(bx*bx + by2*by2 + bz*bz);
-
-      // Heuristik: lebih deket mana
-      if (hd < bd) {
-        _hpOut.x = hp.x; _hpOut.y = hp.y; _hpOut.z = hp.z;
-      } else {
-        _hpOut.x = bp.x; _hpOut.y = bp.y; _hpOut.z = bp.z;
-      }
+      if (hd < bd) { _hpOut.x = hp.x; _hpOut.y = hp.y; _hpOut.z = hp.z; }
+      else { _hpOut.x = bp.x; _hpOut.y = bp.y; _hpOut.z = bp.z; }
       return _hpOut;
     }
 
@@ -384,14 +331,12 @@
         if (!_pv) _pv = cam.position.clone();
         var ndc = _pv.set(hp.x, hp.y, hp.z).project(cam);
         if (!(ndc.z > -1 && ndc.z < 1)) return false;
-
         var px = ndc.x * (innerWidth / 2);
         var py = -ndc.y * (innerHeight / 2);
         var distPx = Math.sqrt(px * px + py * py);
         return distPx <= P.povCircleR;
       } catch (e) { return false; }
     }
-
     function hasLineOfSight(g, cam, hp) {
       try {
         if (typeof g.cast !== 'function') return true;
@@ -404,7 +349,6 @@
         return !hit;
       } catch (e) { return true; }
     }
-
     function isBotReal(p) {
       if (!p || !p.obj || !p.c) return false;
       if (p.dead || !(p.hp > 0)) return false;
@@ -412,7 +356,6 @@
       if (p.obj.visible === false) return false;
       return true;
     }
-
     function move(dx, dy) {
       var ev;
       try { ev = new MouseEvent('mousemove', { bubbles: true, cancelable: true, movementX: dx, movementY: dy }); }
@@ -421,14 +364,20 @@
       if (ev.movementY !== dy) { try { Object.defineProperty(ev, 'movementY', { value: dy }); } catch (e) {} }
       (document.body || document.documentElement).dispatchEvent(ev);
     }
-    function down() { try { (document.body || document.documentElement).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })); } catch (e) {} }
+    function down() {
+      try { (document.body || document.documentElement).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })); } catch (e) {}
+      AB.freshFire = 1;
+    }
     function up() { try { (document.body || document.documentElement).dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 })); } catch (e) {} holding = false; }
 
     var fireIds = new Set();
     function inZone(t) { return t.clientX > innerWidth * 0.50 && t.clientY > innerHeight * 0.45; }
     function syncFire() { fireHeld = fireIds.size; st.fire = fireHeld; }
     addEventListener('touchstart', function (e) {
-      for (var i = 0; i < e.changedTouches.length; i++) { var t = e.changedTouches[i]; if (inZone(t)) fireIds.add(t.identifier); }
+      for (var i = 0; i < e.changedTouches.length; i++) {
+        var t = e.changedTouches[i];
+        if (inZone(t)) { fireIds.add(t.identifier); AB.freshFire = 1; }
+      }
       syncFire();
     }, true);
     addEventListener('touchmove', function (e) {
@@ -448,7 +397,7 @@
       requestAnimationFrame(tick);
       if (!G) { G = game(); if (!G) return; st.G = true; log('G unlocked', V); try { buzz(30); } catch (e) {} }
       var g = G, self = g.P.s, cam = g.camera;
-      if (!self || self.dead) { if (holding) up(); lastPick = null; st.lock = 0; return; }
+      if (!self || self.dead) { if (holding) up(); lastPick = null; st.lock = 0; AB.target = null; AB.freshFire = 0; return; }
       var now = performance.now(), m = cam.matrixWorld.elements;
       C.x = m[12]; C.y = m[13]; C.z = m[14];
       var yaw = +self.yaw || 0, pitch = +self.pitch || 0;
@@ -456,8 +405,10 @@
       F.x = -Math.sin(yaw) * cp; F.y = Math.sin(pitch); F.z = -Math.cos(yaw) * cp;
 
       var useLegacy = (P.aimMode === 'legacy');
+      var list = g.bots;
 
-      var best = null, bestP = null, bestA = 1e9, bestD = 1e9, myTeam = self.team, list = g.bots, n = 0, en = 0;
+      /* ---------- 1) AIM LOCK (lama) ---------- */
+      var best = null, bestP = null, bestA = 1e9, bestD = 1e9, myTeam = self.team, n = 0, en = 0;
       for (var i = 0; i < list.length; i++) {
         var p = list[i];
         if (!isBotReal(p)) continue;
@@ -474,60 +425,105 @@
           if (!isInsidePOVCircle(cam, hp)) continue;
           if (!hasLineOfSight(g, cam, hp)) continue;
         }
-
         en++;
         var ey = wrap(Math.atan2(-dx, -dz) - yaw);
         var ep = Math.asin(clamp(dy / d, -1, 1)) - pitch;
         var a = Math.sqrt(ey * ey + ep * ep);
         if (a > P.cone) continue;
-
         var better = (P.mode === 'angle') ? (a < bestA) : (d < bestD - P.bias || (d <= bestD + P.bias && a < bestA));
         if (better) { bestA = a; bestD = d; best = p; bestP = { x: hp.x, y: hp.y, z: hp.z }; }
       }
       st.bots = n; st.enemies = en;
-      if (!best || !aimOn) { lastPick = null; st.lock = 0; if (holding) up(); return; }
 
-      if (!useLegacy) {
-        if (!isInsidePOVCircle(cam, bestP) || !hasLineOfSight(g, cam, bestP)) {
-          lastPick = null; st.lock = 0; if (holding) up(); return;
+      /* ---------- 2) AIMBOT-ON-FIRE ----------
+         Acquire target saat: fire baru ditekan, ATAU fire masih ditahan & lock habis.
+         Tidak acquire saat musuh cuma kelihatan (tanpa fire). */
+      var doAimbot = false;
+      var wantAcquire = P.aimbotOn && (AB.freshFire || (fireHeld > 0 && now >= AB.lockUntil));
+      if (wantAcquire) {
+        AB.freshFire = 0;
+        var bestAb = null, bestAbD = 1e9;
+        for (var j = 0; j < list.length; j++) {
+          var q = list[j];
+          if (!isBotReal(q) || q === self || q.team === myTeam) continue;
+          var qp = getTargetPoint(q); if (!qp) continue;
+          var qdx = qp.x - C.x, qdy = qp.y - C.y, qdz = qp.z - C.z;
+          var qd = Math.sqrt(qdx*qdx + qdy*qdy + qdz*qdz);
+          if (qd < 2 || qd > P.reach) continue;
+          if (!hasLineOfSight(g, cam, qp)) continue;
+          if (qd < bestAbD) { bestAbD = qd; bestAb = { bot: q, p: { x: qp.x, y: qp.y, z: qp.z } }; }
+        }
+        if (bestAb) {
+          AB.target = bestAb;
+          AB.lockUntil = now + P.aimbotHoldMs;
+          AB.lastShot = now;
         }
       }
+      if (AB.target && now < AB.lockUntil) doAimbot = true;
+      else AB.target = null;
 
-      var t = O.sens * (cam.fov / O.fov) * 0.005;
-      if (!(t > 0)) return;
-      var ey2 = wrap(Math.atan2(-(bestP.x - C.x), -(bestP.z - C.z)) - yaw);
-      var d2 = Math.hypot(bestP.x - C.x, bestP.y - C.y, bestP.z - C.z);
-      var ep2 = Math.asin(clamp((bestP.y - C.y) / d2, -1, 1)) - pitch;
-      var px = clamp(-ey2 / t * P.gain, -220, 220);
-      var py = clamp((O.invert ? 1 : -1) * ep2 / t * P.gain, -220, 220);
-      if (Math.abs(px) + Math.abs(py) > 0.5) move(px, py);
-      st.err = bestA; st.dist = bestD; st.lock = 1; lastPick = best;
-
-      if (!(P.autoFire || fireHeld) || now < nextTap || holding) return;
-
-      if (!useLegacy) {
-        if (!hasLineOfSight(g, cam, bestP) && !FL.wallbang) return;
+      /* ---------- 3) Terapkan aim ---------- */
+      if (doAimbot && AB.target) {
+        var ap = AB.target.p;
+        var at = O.sens * (cam.fov / O.fov) * 0.005 * P.aimbotGain;
+        if (at > 0) {
+          var aey = wrap(Math.atan2(-(ap.x - C.x), -(ap.z - C.z)) - yaw);
+          var ad2 = Math.hypot(ap.x - C.x, ap.y - C.y, ap.z - C.z);
+          var aep = Math.asin(clamp((ap.y - C.y) / ad2, -1, 1)) - pitch;
+          var apx = clamp(-aey / at, -260, 260);
+          var apy = clamp((O.invert ? 1 : -1) * aep / at, -260, 260);
+          if (Math.abs(apx) + Math.abs(apy) > 0.5) move(apx, apy);
+          st.aimbot = 1;
+        }
+      } else {
+        st.aimbot = 0;
+        if (!best || !aimOn) {
+          lastPick = null; st.lock = 0;
+          if (holding) up();
+          return;
+        }
+        if (!useLegacy) {
+          if (!isInsidePOVCircle(cam, bestP) || !hasLineOfSight(g, cam, bestP)) {
+            lastPick = null; st.lock = 0; if (holding) up(); return;
+          }
+        }
+        var t = O.sens * (cam.fov / O.fov) * 0.005;
+        if (!(t > 0)) return;
+        var ey2 = wrap(Math.atan2(-(bestP.x - C.x), -(bestP.z - C.z)) - yaw);
+        var d2 = Math.hypot(bestP.x - C.x, bestP.y - C.y, bestP.z - C.z);
+        var ep2 = Math.asin(clamp((bestP.y - C.y) / d2, -1, 1)) - pitch;
+        var px = clamp(-ey2 / t * P.gain, -220, 220);
+        var py = clamp((O.invert ? 1 : -1) * ep2 / t * P.gain, -220, 220);
+        if (Math.abs(px) + Math.abs(py) > 0.5) move(px, py);
+        st.err = bestA; st.dist = bestD; st.lock = 1; lastPick = best;
       }
 
-      // HITBOX CHECK SAAT NEMBAK
+      /* ---------- 4) Fire handling ---------- */
+      if (!(P.autoFire || fireHeld) || now < nextTap || holding) {
+        if (P.aimbotOn && fireHeld > 0) AB.lastShot = now;
+        return;
+      }
+      var fireTarget = doAimbot && AB.target ? AB.target.bot : best;
+      var firePoint = doAimbot && AB.target ? AB.target.p : bestP;
+      if (!fireTarget || !firePoint) return;
+
+      if (!useLegacy && !doAimbot) {
+        if (!hasLineOfSight(g, cam, firePoint) && !FL.wallbang) return;
+      }
       var hit = null;
-      try { hit = best.hitTest(C, F, P.reach); } catch (e) { hit = null; }
+      try { hit = fireTarget.hitTest(C, F, P.reach); } catch (e) { hit = null; }
       if (!hit) return;
-
-      if (P.hitbox === 'head') {
-        if (!hit.head) return;
-      } else if (P.hitbox === 'body') {
-        // Tembak kalau kena badan atau bagian manapun (selain miss)
-        // Beberapa game hitTest body mengembalikan 'body', 'chest', atau apapun selain 'head'
-        // Asalkan tidak null, anggap kena badan
-      } else if (P.hitbox === 'nearest') {
-        // Pas nembak nearest, apapun hitboxnya yang penting kena
-      }
+      if (P.hitbox === 'head') { if (!hit.head) return; }
+      else if (P.hitbox === 'body') { /* badan / apa saja */ }
+      else if (P.hitbox === 'nearest') { /* apa saja */ }
 
       down(); holding = true;
-      var holdMs = 45 + Math.random() * 30;
+      var holdMs, gapMs;
+      if (SF.on) { holdMs = 20 + Math.random() * 15; gapMs = 25 + Math.random() * 20; }
+      else { holdMs = 45 + Math.random() * 30; gapMs = 90 + Math.random() * 70; }
       setTimeout(function () { if (holding) up(); }, holdMs);
-      nextTap = now + holdMs + 90 + Math.random() * 70;
+      nextTap = now + holdMs + gapMs;
+      if (P.aimbotOn) AB.lastShot = now;
     }
 
     function buzz(p) { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} }
@@ -539,19 +535,11 @@
     }, 120);
     setInterval(function () { if (!G) { G = game(); if (G) { st.G = true; log('G late unlock'); } } }, 500);
     setInterval(function () {
-      try {
-        if (!window.__pbx && HIDDEN.pbx) { try { window.__pbx = HIDDEN.pbx; } catch (e) {} }
-      } catch (e) {}
+      try { if (!window.__pbx && HIDDEN.pbx) { try { window.__pbx = HIDDEN.pbx; } catch (e) {} } } catch (e) {}
     }, 2000);
 
     var FL = {
-      wallbang: 1,
-      infAmmo: 1,
-      noRecoil: 1,
-      godmode: 0,
-      noclip: 0,
-      nadeAim: 1,
-      antiKick: 1
+      wallbang: 1, infAmmo: 1, noRecoil: 1, godmode: 0, noclip: 0, nadeAim: 1, antiKick: 1
     };
 
     var PB_API = {
@@ -562,21 +550,18 @@
           dist: +st.dist.toFixed(2), mode: P.mode, aimMode: P.aimMode,
           povCircleR: P.povCircleR, hitbox: P.hitbox,
           err: +(st.err * 57.2958).toFixed(2), fire: fireHeld, autoFire: P.autoFire,
-          sens: O.sens, fov: O.fov
+          sens: O.sens, fov: O.fov, aimbot: P.aimbotOn, aimbotActive: st.aimbot
         };
       },
       cfg: function (o) { if (o) for (var k in o) if (k in P) P[k] = o[k]; return P; },
       on: function () { aimOn = true; st.aim = true; return 'on'; },
       off: function () { aimOn = false; st.aim = false; up(); return 'off'; },
       aimMode: function (mode) {
-        if (mode === 'pov' || mode === 'legacy') {
-          P.aimMode = mode;
-          try { localStorage.setItem('ir_aimmode', mode); } catch (e) {}
-        }
+        if (mode === 'pov' || mode === 'legacy') { P.aimMode = mode; try { localStorage.setItem('ir_aimmode', mode); } catch (e) {} }
         return P.aimMode;
       },
       povCircle: function (v) {
-        if (typeof v === 'number' && v >= 40 && v <= 400) {
+        if (typeof v === 'number' && v >= 40) {
           P.povCircleR = v;
           try { localStorage.setItem('ir_povcirc', String(v)); } catch (e) {}
         }
@@ -584,11 +569,30 @@
       },
       hitbox: function (v) {
         if (v === 'head' || v === 'body' || v === 'nearest') {
-          P.hitbox = v;
-          st.hitbox = v;
+          P.hitbox = v; st.hitbox = v;
           try { localStorage.setItem('ir_hitbox', v); } catch (e) {}
         }
         return P.hitbox;
+      },
+      aimbot: function (on) {
+        P.aimbotOn = on ? 1 : 0;
+        if (!P.aimbotOn) AB.target = null;
+        try { localStorage.setItem('ir_aimbot', P.aimbotOn ? '1' : '0'); } catch (e) {}
+        return P.aimbotOn;
+      },
+      aimbotGain: function (v) {
+        if (typeof v === 'number' && v > 0) {
+          P.aimbotGain = v;
+          try { localStorage.setItem('ir_aimbot_gain', String(v)); } catch (e) {}
+        }
+        return P.aimbotGain;
+      },
+      aimbotHold: function (v) {
+        if (typeof v === 'number' && v >= 50) {
+          P.aimbotHoldMs = v;
+          try { localStorage.setItem('ir_aimbot_hold', String(v)); } catch (e) {}
+        }
+        return P.aimbotHoldMs;
       },
       list: function () {
         var g = game(); if (!g) return 'no G';
@@ -695,7 +699,8 @@
       for (; idx < E.slots.length; idx++) E.slots[idx].box.style.display = 'none';
       E.n = idx;
     }
-        /* BONE ESP */
+
+    /* BONE ESP */
     var BE = { on: 0, wrap: null, host: null, hostAt: 0, last: 0, range: 60 };
     var BONE_PAIRS = [
       ['Head','Neck'],['Neck','Spine3'],['Spine3','Spine2'],['Spine2','Spine1'],['Spine1','Pelvis'],
@@ -712,8 +717,7 @@
       w.setAttribute('data-pb', '1');
       w.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:2147482999';
       host.appendChild(w);
-      BE.wrap = w;
-      BE.ctx = w.getContext('2d');
+      BE.wrap = w; BE.ctx = w.getContext('2d');
       return true;
     }
     function beClear() { if (BE.ctx && BE.wrap) { BE.ctx.clearRect(0, 0, BE.wrap.width, BE.wrap.height); } }
@@ -768,13 +772,11 @@
         if (!p || !p.obj || !p.c || p === self) continue;
         if (p.team === my) continue;
         if (p.dead || !(p.hp > 0)) continue;
-        var mm = p.obj.matrixWorld && p.obj.matrixWorld.elements;
-        if (!mm) continue;
+        var mm = p.obj.matrixWorld && p.obj.matrixWorld.elements; if (!mm) continue;
         var dx = mm[12] - cx, dy = mm[13] - cy, dz = mm[14] - cz;
         var dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
         if (dist > BE.range) continue;
-        var by = p.c.byName;
-        if (!by) continue;
+        var by = p.c.byName; if (!by) continue;
         for (var j = 0; j < BONE_PAIRS.length; j++) {
           var ba = by[BONE_PAIRS[j][0]], bb = by[BONE_PAIRS[j][1]];
           if (!ba || !bb) continue;
@@ -782,10 +784,7 @@
           if (!beProject(cam, r, bb, pb)) continue;
           if (pa.x < r.left - 200 || pa.x > r.left + r.width + 200) continue;
           if (pa.y < r.top - 200 || pa.y > r.top + r.height + 200) continue;
-          ctx.beginPath();
-          ctx.moveTo(pa.x, pa.y);
-          ctx.lineTo(pb.x, pb.y);
-          ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
         }
       }
       ctx.shadowBlur = 0;
@@ -797,12 +796,9 @@
       if (g) { try { wbPatch(); } catch (e) {} try { ammoTick(); } catch (e) {} try { dmgTick(); } catch (e) {} }
       if (!E.on) { eClear(); } else {
         var t = performance.now();
-        if (t - E.last < 33) { /* throttle */ }
-        else {
+        if (t - E.last < 33) {} else {
           E.last = t;
-          if (!eInit()) {} else if (!g) { eClear(); } else {
-            try { eDraw(g); } catch (err) { eClear(); }
-          }
+          if (!eInit()) {} else if (!g) { eClear(); } else { try { eDraw(g); } catch (err) { eClear(); } }
         }
       }
       try { beDraw(g); } catch (e) { beClear(); }
@@ -869,11 +865,7 @@
       var p = g.P, inv = null, w = null;
       try { inv = p.inv; } catch (e) {}
       if (inv) {
-        for (var k in inv) {
-          var s = inv[k];
-          if (!s || typeof s !== 'object') continue;
-          try { if (typeof s.reserve === 'number') s.reserve = 999; } catch (e) {}
-        }
+        for (var k in inv) { var s = inv[k]; if (!s || typeof s !== 'object') continue; try { if (typeof s.reserve === 'number') s.reserve = 999; } catch (e) {} }
       }
       try { if (typeof p.extReserve === 'number') p.extReserve = 99; } catch (e) {}
       try { w = p.W; } catch (e) { w = null; }
@@ -896,49 +888,47 @@
     try { requestAnimationFrame(nrecTick); } catch (e) {}
 
     /* GODMODE */
-    var GB = { s: null, off: 0, was: 0, died: 0, orig: null, cap: null };
+    var GB = { s: null, field: null, patched: 0, origHT: null, lastApply: 0 };
     function gbBind(s) {
       if (!s || GB.s === s) return;
-      GB.s = s;
-      var cap = function () { var m = s.maxHp; return (typeof m === 'number' && m > 1) ? m : 100; };
-      GB.cap = cap;
-      var val = cap();
+      GB.s = s; GB.field = null;
       try {
-        Object.defineProperty(s, 'hp', {
-          configurable: true,
-          get: function () { return val; },
-          set: function (x) {
-            if (typeof x !== 'number' || !isFinite(x)) return;
-            val = GB.off ? x : ((x >= cap()) ? x : cap());
-          }
-        });
-        s.hp = cap();
-      } catch (e) {}
-      try {
-        GB.orig = s.die;
-        s.die = function (k, kind) {
-          if (!FL.godmode || GB.off || !k || k === this) { GB.died = 1; try { return GB.orig.call(this, k, kind); } catch (e) {} return; }
-          try { this.dead = false; this.hp = cap(); } catch (e) {}
-        };
-      } catch (e) {}
-      try { if (typeof s.hitTest === 'function') s.hitTest = function () { return null; }; } catch (e) {}
+        if (typeof s.flicker === 'number') GB.field = 'flicker';
+        else if (typeof s.spawnProtect === 'number') GB.field = 'spawnProtect';
+        else if (typeof s.protect === 'number') GB.field = 'protect';
+        else if (typeof s.invuln === 'number') GB.field = 'invuln';
+        else if (typeof s.invulnT === 'number') GB.field = 'invulnT';
+        else if (typeof s.spawnT === 'number') GB.field = 'spawnT';
+      } catch (e) { GB.field = null; }
     }
     function gbTick() {
       requestAnimationFrame(gbTick);
       try {
-        var g = G || game();
-        if (!g || !g.P || !g.P.s) return;
+        if (!FL.godmode) {
+          if (GB.patched && GB.s && GB.origHT) { try { GB.s.hitTest = GB.origHT; } catch (e) {} GB.patched = 0; }
+          return;
+        }
+        var g = G || game(); if (!g || !g.P || !g.P.s) return;
         var s = g.P.s;
         if (s !== GB.s) gbBind(s);
-        if (!FL.godmode) { GB.was = 0; return; }
-        var y = (s.mover && s.mover.pos) ? s.mover.pos.y : 0;
-        GB.off = (isFinite(y) && y < -8) ? 1 : 0;
-        if (!s.dead) GB.died = 0;
-        if (!GB.off) {
-          if (GB.was && !s.dead && GB.cap) { try { s.hp = GB.cap(); } catch (e) {} }
-          if (!GB.died && s.dead) s.dead = false;
+        if (!GB.s || s.dead) return;
+        var now = performance.now();
+        if (now - GB.lastApply < 150) return;
+        GB.lastApply = now;
+        if (GB.field) { try { s[GB.field] = 9e9; } catch (e) {} }
+        else {
+          try { if (typeof s.flicker === 'number') s.flicker = 9e9; } catch (e) {}
+          try { if (typeof s.spawnProtect === 'number') s.spawnProtect = 9e9; } catch (e) {}
+          try { if (typeof s.protect === 'number') s.protect = 9e9; } catch (e) {}
+          try { if (typeof s.invuln === 'number') s.invuln = 9e9; } catch (e) {}
+          try { if (typeof s.invulnT === 'number') s.invulnT = 9e9; } catch (e) {}
+          try { if (typeof s.spawnT === 'number') s.spawnT = 9e9; } catch (e) {}
         }
-        GB.was = GB.off;
+        if (!GB.patched && typeof s.hitTest === 'function') {
+          GB.origHT = s.hitTest;
+          s.hitTest = function () { if (FL.godmode) return null; return GB.origHT.apply(this, arguments); };
+          GB.patched = 1;
+        }
       } catch (e) {}
     }
     try { requestAnimationFrame(gbTick); } catch (e) {}
@@ -947,10 +937,8 @@
     var NC = { s: null, m: null, has: 0, gx: 0, gy: 0, gz: 0, o: null, d: null, mv: null, patched: 0 };
     function ncBind() {
       if (!FL.noclip) return;
-      var g = G || game();
-      if (!g || !g.P || !g.P.s) return;
-      var s = g.P.s, m = s.mover;
-      if (!m) return;
+      var g = G || game(); if (!g || !g.P || !g.P.s) return;
+      var s = g.P.s, m = s.mover; if (!m) return;
       NC.s = s;
       if (NC.m === m && NC.patched) return;
       NC.m = m; NC.has = 0; NC.patched = 1;
@@ -959,11 +947,7 @@
       try { m.depenetrate = function () { return false; }; } catch (e) {}
       try {
         NC.mv = m.move;
-        m.move = function () {
-          var r = NC.mv.apply(this, arguments);
-          try { ncGuard(this); } catch (err) {}
-          return r;
-        };
+        m.move = function () { var r = NC.mv.apply(this, arguments); try { ncGuard(this); } catch (err) {} return r; };
       } catch (e) {}
     }
     function ncProbe(g, x, y, z) {
@@ -1011,10 +995,7 @@
     function pbOut(d) {
       if (typeof d !== 'string' || d.length < 20 || d.length > 4096) return d;
       if (d.indexOf('"hello"') < 0 && d.indexOf('"resume"') < 0) return d;
-      try {
-        var j = JSON.parse(d);
-        if (j && (j.t === 'hello' || j.t === 'resume')) { j.dev = PBD.dev; j.fp = PBD.fp; return JSON.stringify(j); }
-      } catch (e) {}
+      try { var j = JSON.parse(d); if (j && (j.t === 'hello' || j.t === 'resume')) { j.dev = PBD.dev; j.fp = PBD.fp; return JSON.stringify(j); } } catch (e) {}
       return d;
     }
 
@@ -1035,8 +1016,7 @@
     }
     (function kgInstall() {
       try {
-        var OW = window.WebSocket;
-        if (!OW || OW.__pbKG) return;
+        var OW = window.WebSocket; if (!OW || OW.__pbKG) return;
         var Pp = OW.prototype;
         var sendN = Pp.send, closeN = Pp.close;
         var rsGet = Object.getOwnPropertyDescriptor(Pp, 'readyState').get;
@@ -1093,23 +1073,11 @@
             } catch (e) {}
           });
           ['onopen', 'onmessage', 'onerror', 'onclose'].forEach(function (p) { if (pre[p]) { try { sock[p] = pre[p]; } catch (e) {} } });
-          try {
-            sock.send = function (d) {
-              d = pbOut(d);
-              try { if (rec.live && rsGet.call(rec.live) === 1) return sendN.call(rec.live, d); } catch (e) {}
-              return sendN.call(sock, d);
-            };
-          } catch (e) {}
-          try {
-            sock.close = function (c, r) {
-              try { if (rec.live) closeN.call(rec.live, c, r); } catch (e) {}
-              try { return closeN.call(sock, c, r); } catch (e) {}
-            };
-          } catch (e) {}
+          try { sock.send = function (d) { d = pbOut(d); try { if (rec.live && rsGet.call(rec.live) === 1) return sendN.call(rec.live, d); } catch (e) {} return sendN.call(sock, d); }; } catch (e) {}
+          try { sock.close = function (c, r) { try { if (rec.live) closeN.call(rec.live, c, r); } catch (e) {} try { return closeN.call(sock, c, r); } catch (e) {} }; } catch (e) {}
           try {
             Object.defineProperty(sock, 'readyState', {
-              configurable: true,
-              get: function () {
+              configurable: true, get: function () {
                 try { if (rec.live) return rsGet.call(rec.live); } catch (e) {}
                 try { return rsGet.call(sock); } catch (e) { return 3; }
               }
@@ -1175,8 +1143,7 @@
         if (now - KGW.st < 10000) return;
         if (now < KGW.next) return;
         if (document.visibilityState === 'hidden') return;
-        KGW.next = now + 120000;
-        KGW.rl++;
+        KGW.next = now + 120000; KGW.rl++;
         if (KGW.rl <= 2) location.reload();
       } catch (e) {}
     }, 2000);
@@ -1209,8 +1176,7 @@
         if (!p || p === s || !p.obj) continue;
         if (p.net === null) continue;
         if (p.team === my || p.dead || !(p.hp > 0)) continue;
-        var e = p.obj.matrixWorld && p.obj.matrixWorld.elements;
-        if (!e) continue;
+        var e = p.obj.matrixWorld && p.obj.matrixWorld.elements; if (!e) continue;
         var dx = e[12] - s.mover.pos.x, dz = e[14] - s.mover.pos.z;
         var d = Math.sqrt(dx * dx + dz * dz);
         if (!(d > 1.2) || d > 220) continue;
@@ -1227,12 +1193,10 @@
       if (!NA.aim) return;
       if (!n.vel || typeof n.vel.length !== 'function' || !n.pos) return;
       if (n.w && n.w.kind === 'medkit') return;
-      var v = n.vel.length();
-      if (!(v > 1)) return;
+      var v = n.vel.length(); if (!(v > 1)) return;
       var kd = n.w && n.w.kind;
       var off = kd === 'frag' ? 0.3 : kd === 'flash' ? 1.5 : 1.05;
-      var to = naTarget(g, off);
-      if (!to) return;
+      var to = naTarget(g, off); if (!to) return;
       var lx = to.x - n.pos.x, ly = to.y - n.pos.y, lz = to.z - n.pos.z;
       var ld = Math.sqrt(lx * lx + ly * ly + lz * lz);
       if (!(ld > 1.5)) return;
@@ -1244,8 +1208,7 @@
         if (!(ed > 1.5)) return;
         if (g.cast(eye, n.pos.clone().set(ex / ed, ey / ed, ez / ed), ed - 1.2)) return;
       } catch (e) { return; }
-      var lo = naSolve(n.pos, to, v, 10, 0);
-      if (!lo) return;
+      var lo = naSolve(n.pos, to, v, 10, 0); if (!lo) return;
       try {
         n.vel.set(lo.vx, lo.vy, lo.vz);
         if (!n.dir || typeof n.dir.set !== 'function') n.dir = n.vel.clone().normalize();
@@ -1314,8 +1277,7 @@
     function qcTick() {
       requestAnimationFrame(qcTick);
       try {
-        var g = G || game();
-        if (!g || !g.P || !g.P.s) return;
+        var g = G || game(); if (!g || !g.P || !g.P.s) return;
         var p = g.P, s = p.s;
         if (!p.inv) return;
         if (QC.invRef !== p.inv) { QC.invRef = p.inv; QC.gate = {}; QC.slot = p.slot; QC.ammo = p.ammo; }
@@ -1347,14 +1309,14 @@
       }
     };
     window.__pbqc = QC_API; HIDDEN.pbqc = QC_API;
-        /* GACOR FEATURES */
+
+    /* GACOR FEATURES */
     var PR = { on: 0, ms: 120 };
     function predictPos(bot, ms) {
       try {
         var mv = bot && bot.mover;
         if (!mv || !mv.vel) return null;
-        var e = bot.obj && bot.obj.matrixWorld && bot.obj.matrixWorld.elements;
-        if (!e) return null;
+        var e = bot.obj && bot.obj.matrixWorld && bot.obj.matrixWorld.elements; if (!e) return null;
         var t = (ms || 120) / 1000;
         return { x: e[12] + mv.vel.x * t, y: e[13] + mv.vel.y * t * 0.35, z: e[14] + mv.vel.z * t };
       } catch (err) { return null; }
@@ -1431,8 +1393,7 @@
           if (!b || b === s || b.dead || !(b.hp > 0)) continue;
           if (b.team === s.team) continue;
           if (typeof b.hitTest !== 'function') continue;
-          var h = null;
-          try { h = b.hitTest(orig, dir, 200); } catch (e) { h = null; }
+          var h = null; try { h = b.hitTest(orig, dir, 200); } catch (e) { h = null; }
           if (!h || !h.head) continue;
           if (now < nextTap || holding) return;
           down(); holding = true;
@@ -1447,8 +1408,7 @@
 
     var SA = { on: 0 };
     function saPatch() {
-      var g = G || game(); var L = g && g.bots;
-      if (!L || !L.length) return;
+      var g = G || game(); var L = g && g.bots; if (!L || !L.length) return;
       for (var i = 0; i < L.length; i++) {
         var b = L[i];
         if (!b || b.__sa || typeof b.hitTest !== 'function') continue;
@@ -1459,8 +1419,7 @@
             try {
               var g2 = G || game(); if (!g2 || !g2.P || !g2.P.s) return f.call(this, o, d, m);
               if (!wbGun()) return f.call(this, o, d, m);
-              var hp = headPoint(this);
-              if (!hp) return f.call(this, o, d, m);
+              var hp = headPoint(this); if (!hp) return f.call(this, o, d, m);
               var cam = g2.camera, me = cam.matrixWorld.elements;
               var ox = me[12], oy = me[13], oz = me[14];
               var dx = hp.x - ox, dy = hp.y - oy, dz = hp.z - oz;
@@ -1485,7 +1444,7 @@
       try {
         var g = G || game(); if (!g || !g.P || !g.P.s) return;
         var s = g.P.s;
-        if (s.dead && !GB.off) { s.dead = false; GB.died = 0; if (GB.cap) { try { s.hp = GB.cap(); } catch (e) {} } }
+        if (s.dead) { s.dead = false; }
       } catch (e) {}
     }
     try { requestAnimationFrame(irTick); } catch (e) {}
@@ -1493,13 +1452,11 @@
     var RD = { on: 0, el: null, dots: [], last: 0 };
     function rdInit() {
       if (RD.el && RD.el.parentNode) return true;
-      var host = document.body || document.documentElement;
-      if (!host) return false;
+      var host = document.body || document.documentElement; if (!host) return false;
       var w = document.createElement('div');
       w.setAttribute('data-pb', '1');
       w.style.cssText = 'position:fixed;right:8px;bottom:8px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.7);border:1px solid rgba(0,180,80,.6);z-index:2147483000;pointer-events:none;display:none';
-      host.appendChild(w);
-      RD.el = w; RD.dots = [];
+      host.appendChild(w); RD.el = w; RD.dots = [];
       return true;
     }
     function rdDraw(g) {
@@ -1517,8 +1474,7 @@
         var p = list[i];
         if (!p || p === s || p.dead || !(p.hp > 0)) continue;
         if (p.team === s.team) continue;
-        var e = p.obj && p.obj.matrixWorld && p.obj.matrixWorld.elements;
-        if (!e) continue;
+        var e = p.obj && p.obj.matrixWorld && p.obj.matrixWorld.elements; if (!e) continue;
         var dx = e[12] - sx, dz = e[14] - sz;
         var d = Math.sqrt(dx * dx + dz * dz);
         if (d > range) continue;
@@ -1575,16 +1531,14 @@
       };
     })();
 
-    var FC = { on: 1, el: null, last: 0 };
+    var FC = { on: 0, el: null, last: 0 };
     function fcInit() {
       if (FC.el && FC.el.parentNode) return true;
-      var host = document.body || document.documentElement;
-      if (!host) return false;
+      var host = document.body || document.documentElement; if (!host) return false;
       var w = document.createElement('div');
       w.setAttribute('data-pb', '1');
       w.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);border:1.5px dashed rgba(0,180,80,.85);border-radius:50%;z-index:2147482999;pointer-events:none;display:none';
-      host.appendChild(w);
-      FC.el = w;
+      host.appendChild(w); FC.el = w;
       return true;
     }
     function fcTick() {
@@ -1612,23 +1566,18 @@
     var TR = { on: 0, wrap: null, host: null, hostAt: 0, slots: [], last: 0 };
     function trInit() {
       if (TR.wrap && TR.wrap.parentNode) return true;
-      var host = document.body || document.documentElement;
-      if (!host) return false;
+      var host = document.body || document.documentElement; if (!host) return false;
       var w = document.createElement('div');
       w.setAttribute('data-pb', '1');
       w.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;overflow:hidden;pointer-events:none;z-index:2147482999';
-      host.appendChild(w);
-      TR.wrap = w; TR.slots = [];
+      host.appendChild(w); TR.wrap = w; TR.slots = [];
       return true;
     }
     function trSlot(i) {
-      var s = TR.slots[i];
-      if (s) return s;
+      var s = TR.slots[i]; if (s) return s;
       var line = document.createElement('div');
       line.style.cssText = 'position:absolute;left:0;top:0;height:1.5px;background:linear-gradient(90deg,rgba(16,185,129,.95),rgba(16,185,129,.35));transform-origin:0 50%;display:none;box-shadow:0 0 4px rgba(16,185,129,.6);border-radius:1px';
-      TR.wrap.appendChild(line);
-      s = { line: line };
-      TR.slots[i] = s;
+      TR.wrap.appendChild(line); s = { line: line }; TR.slots[i] = s;
       return s;
     }
     function trClear() { for (var i = 0; i < TR.slots.length; i++) TR.slots[i].line.style.display = 'none'; }
@@ -1638,13 +1587,11 @@
       TR.hostAt = now;
       var best = null, ba = 0, cs = document.getElementsByTagName('canvas');
       for (var i = 0; i < cs.length; i++) {
-        var c = cs[i];
-        if (c.getAttribute('data-pb')) continue;
+        var c = cs[i]; if (c.getAttribute('data-pb')) continue;
         var r = c.getBoundingClientRect(), a = r.width * r.height;
         if (a > ba) { ba = a; best = c; }
       }
-      TR.host = best || null;
-      return TR.host;
+      TR.host = best || null; return TR.host;
     }
     var _trV = null;
     function trProj(cam, r, x, y, z) {
@@ -1658,8 +1605,7 @@
       var cam = g.camera, list = g.bots, self = g.P && g.P.s;
       if (!list || !cam || !self || self.dead) { trClear(); return; }
       if (!trInit()) return;
-      var host = trHost();
-      if (!host) { trClear(); return; }
+      var host = trHost(); if (!host) { trClear(); return; }
       var r = host.getBoundingClientRect();
       if (!(r.width > 0)) { trClear(); return; }
       var ox = r.left + r.width / 2;
@@ -1709,13 +1655,15 @@
       noclip: function (on) { FL.noclip = on ? 1 : 0; if (!FL.noclip) NC.patched = 0; return FL.noclip; },
       nadeAim: function (on) { FL.nadeAim = on ? 1 : 0; NA.aim = FL.nadeAim ? 1 : 0; return FL.nadeAim; },
       antiKick: function (on) { FL.antiKick = on ? 1 : 0; return FL.antiKick; },
+      smoothFire: function (on) { SF.on = on ? 1 : 0; return SF.on; },
       st: function () {
         return {
           pred: PR.on, rapid: RF.on, fastReload: FR.on, instScope: IS.on,
           trig: TB.on, silent: SA.on, lob: SL.on, respawn: IR.on,
           radar: RD.on, hpo: HPO.on, fovc: FC.on, tracer: TR.on,
           wallbang: FL.wallbang, infAmmo: FL.infAmmo, noRecoil: FL.noRecoil,
-          godmode: FL.godmode, noclip: FL.noclip, nadeAim: FL.nadeAim, antiKick: FL.antiKick
+          godmode: FL.godmode, noclip: FL.noclip, nadeAim: FL.nadeAim, antiKick: FL.antiKick,
+          aimbot: P.aimbotOn, smoothFire: SF.on
         };
       }
     };
@@ -1724,8 +1672,7 @@
     (function pbxFrame() {
       requestAnimationFrame(pbxFrame);
       try {
-        var g = G || game();
-        if (!g) return;
+        var g = G || game(); if (!g) return;
         if (SA.on) saPatch();
         if (RD.on) rdDraw(g);
         if (TR.on) trDraw(g);
@@ -1736,8 +1683,7 @@
       try {
         ['__pb', '__pbvis', '__pbnade', '__pbqc', '__pbx'].forEach(function (k) {
           try {
-            var v = window[k];
-            if (!v) return;
+            var v = window[k]; if (!v) return;
             Object.defineProperty(window, k, { configurable: false, enumerable: false, get: function () { return v; } });
           } catch (e) {}
         });
@@ -1748,76 +1694,120 @@
     requestAnimationFrame(tick);
 
     /* ============================================================
-       UI PANEL
+       UI PANEL — minimalis
+       Collapsed: title + tombol "+"
+       Expanded: rail ikon minimal + body rapat
+       Default: Aim Lock OFF, POV Circle OFF, Smooth Fire ON
        ============================================================ */
     (function pbUI() {
       if (window.__pbUI) return;
       window.__pbUI = 1;
 
+      (function ensureFA() {
+        try {
+          if (document.querySelector('link[data-fa]')) return;
+          var l = document.createElement('link');
+          l.rel = 'stylesheet';
+          l.setAttribute('data-fa', '1');
+          l.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css';
+          (document.head || document.documentElement).appendChild(l);
+        } catch (e) {}
+      })();
+
       var css = [
-        '.fk{position:fixed;top:8px;right:8px;z-index:2147483600;font:12px/1.35 system-ui,Tahoma,sans-serif;color:#1f2937;',
-        '  background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;',
-        '  box-shadow:0 4px 20px rgba(0,0,0,.12);width:300px;',
-        '  pointer-events:auto;user-select:none;transform:translateZ(0);overflow:hidden;transition:width .15s}',
+        '.fk{position:fixed;top:8px;right:8px;z-index:2147483600;font:12px/1.3 system-ui,Tahoma,sans-serif;color:#1f2937;',
+        '  background:#fff;border:1px solid #e8ecf0;border-radius:10px;',
+        '  box-shadow:0 3px 14px rgba(0,0,0,.08);pointer-events:auto;user-select:none;overflow:hidden;transition:width .15s,height .15s}',
         '.fk.hide{display:none}',
-        '.fk.collapsed{width:auto;max-width:360px}',
-        '.fk.collapsed .fk-body{display:none}',
-        '.fk.collapsed .fk-tab{display:none}',
-        '.fk-h{display:flex;align-items:center;gap:8px;padding:9px 11px;border-bottom:1px solid #e2e8f0;',
-        '  background:#f8fafc;font-weight:800;letter-spacing:.6px;cursor:move}',
-        '.fk-h .dot{width:9px;height:9px;border-radius:50%;background:#7c3aed;box-shadow:0 0 6px #a78bfa;flex:0 0 9px}',
-        '.fk-h .title{font-size:13px;color:#0f172a}',
-        '.fk-h .v{opacity:.85;font-weight:400;font-size:10px;margin-left:auto;color:#64748b}',
-        '.fk-toggle{cursor:pointer;font-size:15px;padding:0 8px;margin-left:4px;color:#0f172a;',
-        '  border-radius:6px;line-height:1;font-weight:800;background:#e2e8f0;text-align:center;min-width:22px}',
-        '.fk-toggle:hover{background:#cbd5e1}',
-        '.fk-tabs{display:flex;align-items:center;background:#f8fafc;border-bottom:1px solid #e2e8f0;',
-        '  padding-right:4px}',
-        '.fk.collapsed .fk-tabs{border-bottom:none;border-radius:0 0 12px 12px}',
-        '.fk-tab{flex:1;text-align:center;padding:7px 4px;font-size:10.5px;letter-spacing:.4px;color:#64748b;cursor:pointer;',
-        '  border-bottom:2px solid transparent;transition:color .15s,border-color .15s,background .15s;font-weight:800;position:relative}',
-        '.fk-tab:hover{color:#334155;background:#f1f5f9}',
-        '.fk-tab.on{color:#7c3aed;border-bottom-color:#7c3aed;background:#f5f3ff}',
-        '.fk-body{padding:8px 10px 10px;max-height:62vh;overflow:auto;background:#ffffff}',
-        '.fk-body::-webkit-scrollbar{width:4px}',
+
+        /* EXPANDED */
+        '.fk.expanded{display:flex;flex-direction:row}',
+        '.fk.expanded .fk-rail{display:flex;flex-direction:column;background:#fafbfc;border-right:1px solid #eef1f4;',
+        '  width:40px;padding:5px 0;gap:2px;flex:0 0 40px;order:0}',
+        '.fk.expanded .fk-body-col{order:1;width:290px;display:flex;flex-direction:column;min-width:0}',
+        '.fk.expanded .fk-tabbar{display:none}',
+
+        /* COLLAPSED */
+        '.fk.collapsed{width:auto}',
+        '.fk.collapsed .fk-rail{display:none}',
+        '.fk.collapsed .fk-body-col{display:none}',
+        '.fk.collapsed .fk-tabbar{display:flex;align-items:center;gap:6px;padding:5px 9px;background:#fafbfc;border-radius:10px}',
+        '.fk.collapsed .fk-tb-title{font:800 11px/1 system-ui,Tahoma,sans-serif;color:#0f172a;letter-spacing:.5px;white-space:nowrap}',
+        '.fk.collapsed .fk-tb-title .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#7c3aed;margin-right:5px;vertical-align:middle}',
+        '.fk-tabbar .fk-tb-open{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;',
+        '  justify-content:center;font-size:12px;color:#fff;cursor:pointer;background:#7c3aed;font-weight:900;flex:0 0 22px;line-height:1}',
+        '.fk-tabbar .fk-tb-open:hover{background:#6d28d9}',
+
+        /* Rail button minimalis (ikon saja) */
+        '.fk-rail .fk-rail-btn{width:32px;height:32px;margin:0 auto;border-radius:6px;display:flex;align-items:center;',
+        '  justify-content:center;font-size:13px;color:#8892a0;cursor:pointer;transition:all .12s}',
+        '.fk-rail .fk-rail-btn:hover{background:#f0f2f5;color:#7c3aed}',
+        '.fk-rail .fk-rail-btn.on{background:#7c3aed;color:#fff}',
+
+        /* Header ramping */
+        '.fk-h{display:flex;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid #eef1f4;',
+        '  background:#fafbfc;font-weight:700;cursor:move}',
+        '.fk-h .dot{width:7px;height:7px;border-radius:50%;background:#7c3aed;flex:0 0 7px}',
+        '.fk-h .title{font-size:12px;color:#0f172a;letter-spacing:.4px}',
+        '.fk-h .v{opacity:.7;font-weight:400;font-size:9px;margin-left:auto;color:#8892a0}',
+        '.fk-toggle{cursor:pointer;margin-left:4px;color:#fff;border-radius:4px;',
+        '  width:20px;height:20px;display:flex;align-items:center;justify-content:center;flex:0 0 20px;font-size:10px;background:#7c3aed}',
+        '.fk-toggle:hover{background:#6d28d9}',
+
+        /* Body rapat */
+        '.fk-body{padding:6px 9px 9px;max-height:60vh;overflow:auto;background:#fff}',
+        '.fk-body::-webkit-scrollbar{width:3px}',
         '.fk-body::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:2px}',
         '.fk-page{display:none}',
         '.fk-page.on{display:block}',
-        '.fk-sec{margin:8px 0 4px;font-size:10px;letter-spacing:1.2px;color:#7c3aed;text-transform:uppercase;opacity:.95;font-weight:800}',
+
+        /* Section */
+        '.fk-sec{margin:8px 0 4px;font-size:9px;letter-spacing:1px;color:#7c3aed;text-transform:uppercase;opacity:.9;font-weight:800;display:flex;align-items:center;gap:4px}',
         '.fk-sec:first-child{margin-top:0}',
-        '.fk-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 0}',
-        '.fk-row label{flex:1;color:#334155;font-size:12px}',
-        '.fk-row small{color:#94a3b8;font-size:10px}',
-        '.fk-row .risk-badge{display:inline-block;padding:0 4px;margin-left:4px;border-radius:3px;font-size:8px;',
-        '  background:#f59e0b;color:#fff;font-weight:900;vertical-align:middle;letter-spacing:.3px;line-height:10px}',
-        '.fk-sw{position:relative;width:38px;height:20px;flex:0 0 38px;border-radius:10px;background:#cbd5e1;transition:background .15s;cursor:pointer}',
-        '.fk-sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .15s}',
+        '.fk-sec i{font-size:10px}',
+
+        /* Rows */
+        '.fk-row{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:3px 0}',
+        '.fk-row label{flex:1;color:#334155;font-size:11px;line-height:1.25}',
+        '.fk-row small{display:block;color:#a0aab5;font-size:9px;line-height:1.15;margin-top:1px}',
+        '.fk-row .risk-badge{display:inline-block;padding:0 3px;margin-left:3px;border-radius:2px;font-size:7px;',
+        '  background:#f59e0b;color:#fff;font-weight:900;vertical-align:middle;letter-spacing:.2px;line-height:9px}',
+
+        /* Switch kecil */
+        '.fk-sw{position:relative;width:32px;height:17px;flex:0 0 32px;border-radius:9px;background:#d4dae1;transition:background .15s;cursor:pointer}',
+        '.fk-sw::after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.15);transition:transform .15s}',
         '.fk-sw.on{background:#7c3aed}',
-        '.fk-sw.on::after{transform:translateX(18px)}',
-        '.fk-slider{display:flex;align-items:center;gap:8px;padding:3px 0}',
-        '.fk-slider label{flex:0 0 92px;font-size:11px;color:#334155}',
-        '.fk-slider input[type=range]{flex:1;height:3px;-webkit-appearance:none;background:#cbd5e1;border-radius:2px;outline:none}',
-        '.fk-slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#7c3aed;cursor:pointer;box-shadow:0 0 4px #a78bfa}',
-        '.fk-slider .n{flex:0 0 46px;text-align:right;font-size:10px;color:#7c3aed;font-variant-numeric:tabular-nums;font-weight:700}',
-        '.fk-select{width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font:12px system-ui,sans-serif;outline:none;background:#fff;color:#334155;cursor:pointer;margin-top:2px}',
+        '.fk-sw.on::after{transform:translateX(15px)}',
+
+        /* Slider rapat */
+        '.fk-slider{display:flex;align-items:center;gap:6px;padding:2px 0}',
+        '.fk-slider label{flex:0 0 80px;font-size:10px;color:#334155}',
+        '.fk-slider input[type=range]{flex:1;height:2px;-webkit-appearance:none;background:#d4dae1;border-radius:2px;outline:none}',
+        '.fk-slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:#7c3aed;cursor:pointer}',
+        '.fk-slider .n{flex:0 0 42px;text-align:right;font-size:9px;color:#7c3aed;font-variant-numeric:tabular-nums;font-weight:700}',
+
+        /* Select */
+        '.fk-select{width:100%;box-sizing:border-box;padding:4px 7px;border:1px solid #cbd5e1;border-radius:5px;font:11px system-ui,sans-serif;outline:none;background:#fff;color:#334155;cursor:pointer;margin-top:2px}',
         '.fk-select:focus{border-color:#7c3aed}',
-        '.fk-btns{display:flex;gap:6px;margin-top:6px}',
-        '.fk-btn{flex:1;padding:6px 0;text-align:center;border-radius:6px;background:#f1f5f9;border:1px solid #cbd5e1;',
-        '  color:#334155;cursor:pointer;font-size:11px;transition:background .15s}',
+
+        /* Buttons */
+        '.fk-btns{display:flex;gap:5px;margin-top:5px}',
+        '.fk-btn{flex:1;padding:5px 0;text-align:center;border-radius:5px;background:#f1f5f9;border:1px solid #d4dae1;',
+        '  color:#334155;cursor:pointer;font-size:10px;transition:background .15s;display:flex;align-items:center;justify-content:center;gap:4px}',
         '.fk-btn:hover{background:#e2e8f0}',
         '.fk-btn:active{background:#7c3aed;color:#fff}',
         '.fk-btn.on{background:#7c3aed;border-color:#7c3aed;color:#fff}',
         '.fk-btn.danger{border-color:#fca5a5;background:#fef2f2;color:#b91c1c}',
         '.fk-btn.danger:hover{background:#fee2e2}',
-        '.fk-foot{margin-top:8px;padding-top:6px;border-top:1px solid #e2e8f0;font-size:10px;color:#64748b;font-variant-numeric:tabular-nums}',
-        '.fk-warn{margin-top:6px;padding:5px 7px;border-radius:6px;background:#fffbeb;border:1px solid #fcd34d;',
-        '  color:#92400e;font-size:10px;line-height:1.3}',
-        '.fk-hint{font-size:10px;color:#94a3b8;line-height:1.3;padding:2px 0 4px}',
-        '.fk-badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:800;letter-spacing:.3px}',
+
+        /* Footer / hint */
+        '.fk-foot{margin-top:6px;padding-top:5px;border-top:1px solid #eef1f4;font-size:9px;color:#8892a0;font-variant-numeric:tabular-nums}',
+        '.fk-warn{margin-top:5px;padding:4px 6px;border-radius:5px;background:#fffbeb;border:1px solid #fcd34d;',
+        '  color:#92400e;font-size:9px;line-height:1.25}',
+        '.fk-hint{font-size:9px;color:#a0aab5;line-height:1.25;padding:2px 0 3px}',
+        '.fk-badge{display:inline-block;padding:1px 5px;border-radius:2px;font-size:8px;font-weight:800;letter-spacing:.2px}',
         '.fk-badge.pov{background:#dbeafe;color:#1e40af}',
-        '.fk-badge.legacy{background:#fee2e2;color:#991b1b}',
-        '.fk-badge.head{background:#fce7f3;color:#9d174d}',
-        '.fk-badge.body{background:#fef3c7;color:#92400e}'
+        '.fk-badge.legacy{background:#fee2e2;color:#991b1b}'
       ].join('');
 
       var style = document.createElement('style');
@@ -1858,7 +1848,7 @@
       function row(label, node, smallTxt) {
         var r = el('div', 'fk-row');
         var lb = el('label', null, label);
-        if (smallTxt) lb.appendChild(el('small', null, ' ' + smallTxt));
+        if (smallTxt) lb.appendChild(el('small', null, smallTxt));
         r.appendChild(lb); r.appendChild(node);
         return r;
       }
@@ -1866,48 +1856,79 @@
         var r = el('div', 'fk-row');
         var lb = el('label', null, label);
         lb.appendChild(el('span', 'risk-badge', 'RISK'));
-        if (smallTxt) lb.appendChild(el('small', null, ' ' + smallTxt));
+        if (smallTxt) lb.appendChild(el('small', null, smallTxt));
         r.appendChild(lb); r.appendChild(node);
         return r;
       }
+      function sec(icon, text) {
+        var s = el('div', 'fk-sec');
+        s.innerHTML = '<i class="fa-solid ' + icon + '"></i> ' + text;
+        return s;
+      }
 
-      var panel = el('div', 'fk');
+      var panel = el('div', 'fk expanded');
       panel.setAttribute('data-pb', '1');
 
+      var rail = el('div', 'fk-rail');
+
+      var bodyCol = el('div', 'fk-body-col');
       var head = el('div', 'fk-h');
       head.appendChild(el('div', 'dot'));
       head.appendChild(el('div', 'title', 'iRiLLL MODZ'));
       head.appendChild(el('div', 'v', 'V' + V));
-
-      var toggleBtn = el('div', 'fk-toggle', '-');
-      toggleBtn.title = 'Minimize / Expand';
+      var toggleBtn = el('div', 'fk-toggle');
+      toggleBtn.innerHTML = '<i class="fa-solid fa-minus"></i>';
+      toggleBtn.title = 'Minimize';
       head.appendChild(toggleBtn);
-
-      var tabsBar = el('div', 'fk-tabs');
       var body = el('div', 'fk-body');
-      panel.appendChild(head); panel.appendChild(tabsBar); panel.appendChild(body);
+      bodyCol.appendChild(head);
+      bodyCol.appendChild(body);
+
+      var tabbar = el('div', 'fk-tabbar');
+      var tbTitle = el('div', 'fk-tb-title');
+      tbTitle.innerHTML = '<span class="dot"></span>iRiLLL MODZ';
+      tabbar.appendChild(tbTitle);
+      var tbOpen = el('div', 'fk-tb-open', '+');
+      tbOpen.title = 'Buka menu';
+      tbOpen.addEventListener('click', function (e) { e.stopPropagation(); setCollapsed(false); });
+      tbOpen.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+      tbOpen.addEventListener('touchstart', function (e) { e.stopPropagation(); }, { passive: true });
+      tabbar.appendChild(tbOpen);
+
+      panel.appendChild(rail);
+      panel.appendChild(bodyCol);
+      panel.appendChild(tabbar);
+
+      var TAB_META = {
+        aim:    { icon: 'fa-crosshairs',  label: 'AIM',    title: 'Aim Lock' },
+        aimbot: { icon: 'fa-bullseye',    label: 'AIMBOT', title: 'Aimbot (snap saat fire)' },
+        vis:    { icon: 'fa-eye',         label: 'ESP',    title: 'Visual ESP' },
+        gacor:  { icon: 'fa-bolt',        label: 'GACOR',  title: 'Advanced' },
+        misc:   { icon: 'fa-sliders',     label: 'MISC',   title: 'Misc' },
+        info:   { icon: 'fa-circle-info', label: 'INFO',   title: 'Info' }
+      };
 
       function setCollapsed(collapsed) {
         panel.classList.toggle('collapsed', collapsed);
-        toggleBtn.textContent = collapsed ? '+' : '-';
+        panel.classList.toggle('expanded', !collapsed);
         try { localStorage.setItem('ir_collapsed', collapsed ? '1' : '0'); } catch (e) {}
       }
-      toggleBtn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        var nowCollapsed = !panel.classList.contains('collapsed');
-        setCollapsed(nowCollapsed);
-      });
+      toggleBtn.addEventListener('click', function (e) { e.stopPropagation(); setCollapsed(true); });
       toggleBtn.addEventListener('mousedown', function (e) { e.stopPropagation(); });
       toggleBtn.addEventListener('touchstart', function (e) { e.stopPropagation(); }, { passive: true });
 
       var TAB_KEY = 'ir_ui_tab';
-      var tabs = {}, pages = {}, order = [];
+      var tabsRail = {}, pages = {}, order = [];
 
       function addTab(key, label) {
-        var t = el('div', 'fk-tab', label);
-        t.addEventListener('click', function () { selectTab(key); });
-        tabsBar.appendChild(t);
-        tabs[key] = t;
+        var meta = TAB_META[key] || { icon: 'fa-circle', label: label, title: label };
+        var tR = el('div', 'fk-rail-btn');
+        tR.innerHTML = '<i class="fa-solid ' + meta.icon + '"></i>';
+        tR.title = meta.title;
+        tR.addEventListener('click', function () { selectTab(key); });
+        rail.appendChild(tR);
+        tabsRail[key] = tR;
+
         var p = el('div', 'fk-page');
         body.appendChild(p);
         pages[key] = p;
@@ -1916,27 +1937,24 @@
       }
       function selectTab(key) {
         order.forEach(function (k) {
-          tabs[k].classList.toggle('on', k === key);
+          tabsRail[k].classList.toggle('on', k === key);
           pages[k].classList.toggle('on', k === key);
         });
         try { localStorage.setItem(TAB_KEY, key); } catch (e) {}
-        if (panel.classList.contains('collapsed')) setCollapsed(false);
       }
 
-      /* ============ TAB 1 — AIM ============ */
+      /* ============ TAB AIM ============ */
       var pAim = addTab('aim', 'AIM');
-
-      pAim.appendChild(el('div', 'fk-sec', 'Aim Mode'));
+      pAim.appendChild(sec('fa-crosshairs', 'Mode Aim Lock'));
       var modeInfo = el('div', 'fk-hint', '');
       pAim.appendChild(modeInfo);
-
       function updateModeInfo() {
         var badge = (P.aimMode === 'legacy')
           ? '<span class="fk-badge legacy">LEGACY</span>'
           : '<span class="fk-badge pov">POV</span>';
         var desc = (P.aimMode === 'legacy')
-          ? 'Aim lama: target di mana saja (tembus dinding / di luar lingkaran).'
-          : 'Target wajib masuk <b>POV circle</b> &amp; <b>kelihatan</b>.';
+          ? 'Aim lama: target di mana saja.'
+          : 'Target wajib masuk POV circle & terlihat.';
         modeInfo.innerHTML = badge + ' ' + desc;
       }
       updateModeInfo();
@@ -1945,144 +1963,161 @@
         window.__pb.aimMode(on ? 'pov' : 'legacy');
         updateModeInfo();
       });
-      pAim.appendChild(row('POV mode', povT.node, '(wajib masuk circle)'));
+      pAim.appendChild(row('POV mode', povT.node, 'Lock hanya dalam lingkaran'));
 
-      // == Hitbox Selector ==
-      pAim.appendChild(el('div', 'fk-sec', 'Target Hitbox'));
+      pAim.appendChild(sec('fa-bullseye', 'Titik Tembak'));
       var hitboxSelect = el('select', 'fk-select');
-      hitboxSelect.innerHTML = `
-        <option value="head">Head (Kepala)</option>
-        <option value="body">Body (Badan)</option>
-        <option value="nearest">Nearest (Terdekat)</option>
-      `;
+      hitboxSelect.innerHTML = ''
+        + '<option value="head">Head — kepala</option>'
+        + '<option value="body">Body — badan</option>'
+        + '<option value="nearest">Nearest — dekat crosshair</option>';
       hitboxSelect.value = P.hitbox;
-      hitboxSelect.addEventListener('change', function() {
-        window.__pb.hitbox(this.value);
-      });
+      hitboxSelect.addEventListener('change', function () { window.__pb.hitbox(this.value); });
       pAim.appendChild(hitboxSelect);
-      
-      var hitboxHint = el('div', 'fk-hint', 'Target titik tembak aimbot. Nearest = Pilih yang paling dekat dari crosshair.');
-      pAim.appendChild(hitboxHint);
 
-      pAim.appendChild(el('div', 'fk-sec', 'Aimbot'));
+      pAim.appendChild(sec('fa-lock', 'Aim Lock'));
       var aimT = toggle(!!(window.__pb && window.__pb.state().aim), function (on) { if (on) window.__pb.on(); else window.__pb.off(); });
-      pAim.appendChild(row('Aim lock', aimT.node));
+      pAim.appendChild(row('Aim lock', aimT.node, 'Auto-lock saat target masuk POV'));
       var autoFireT = toggle(!!P.autoFire, function (on) { P.autoFire = on ? 1 : 0; });
-      pAim.appendChild(row('Auto fire', autoFireT.node));
+      pAim.appendChild(row('Auto fire', autoFireT.node, 'Tembak otomatis saat lock'));
       var invertT = toggle(!!O.invert, function (on) { O.invert = on; });
-      pAim.appendChild(row('Invert Y', invertT.node));
+      pAim.appendChild(row('Invert Y', invertT.node, 'Balik arah vertikal'));
 
-      /* ============ TAB 2 — ESP ============ */
+      /* ============ TAB AIMBOT ============ */
+      var pAb = addTab('aimbot', 'AIMBOT');
+      pAb.appendChild(sec('fa-bullseye', 'Aimbot (snap saat fire)'));
+      pAb.appendChild(el('div', 'fk-hint',
+        'Kamera tidak lock sebelum tembak. Snap saat kamu fire. Tanpa FOV.'));
+      var aimbotT = toggle(!!P.aimbotOn, function (on) { window.__pb.aimbot(on); });
+      pAb.appendChild(rowRisk('Enable aimbot', aimbotT.node, 'Snap saat fire'));
+
+      var abGainS = slider(0.5, 3.0, 0.05, P.aimbotGain,
+        function (v) { return 'x' + v.toFixed(2); },
+        function (v) { window.__pb.aimbotGain(v); });
+      abGainS.label.textContent = 'Snap speed'; pAb.appendChild(abGainS.node);
+
+      var abHoldS = slider(50, 800, 10, P.aimbotHoldMs,
+        function (v) { return v.toFixed(0) + 'ms'; },
+        function (v) { window.__pb.aimbotHold(v); });
+      abHoldS.label.textContent = 'Lock duration'; pAb.appendChild(abHoldS.node);
+
+      /* ============ TAB ESP ============ */
       var pVis = addTab('vis', 'ESP');
-      pVis.appendChild(el('div', 'fk-sec', 'POV Circle (Aim Area)'));
+      pVis.appendChild(sec('fa-circle-notch', 'POV Circle'));
       var fcT = toggle(!!FC.on, function (on) { window.__pbx.fovc(on); });
-      pVis.appendChild(row('Show circle', fcT.node, '(visual ring)'));
+      pVis.appendChild(row('Show circle', fcT.node, 'Ring visual'));
 
-      var povCircleS = slider(40, 400, 10, P.povCircleR,
+      var povCircleS = slider(40, 2000, 10, P.povCircleR,
         function (v) { return v.toFixed(0) + 'px'; },
         function (v) { window.__pb.povCircle(v); });
       povCircleS.label.textContent = 'Circle size';
       pVis.appendChild(povCircleS.node);
 
-      var povHint = el('div', 'fk-hint',
-        'Aimbot <b>hanya lock target yang masuk lingkaran ini</b>. Besar ring = besar area aimbot.');
-      pVis.appendChild(povHint);
-
-      pVis.appendChild(el('div', 'fk-sec', 'Overlay'));
+      pVis.appendChild(sec('fa-layer-group', 'Overlay'));
       var espT = toggle(!!(window.__pbvis && window.__pbvis.is()), function (on) { if (on) window.__pbvis.on(); else window.__pbvis.off(); });
-      pVis.appendChild(row('Enemy ESP', espT.node));
+      pVis.appendChild(row('Enemy ESP', espT.node, 'Box + HP bar'));
       var boneT = toggle(!!BE.on, function (on) { window.__pbvis.bone(on, BE.range); });
-      pVis.appendChild(rowRisk('Bone ESP', boneT.node, 'range 60m'));
+      pVis.appendChild(rowRisk('Bone ESP', boneT.node, 'Skeleton'));
       var boneRangeS = slider(20, 120, 5, BE.range, function (v) { return v + 'm'; }, function (v) { BE.range = v; if (BE.on) window.__pbvis.bone(1, v); });
       boneRangeS.label.textContent = 'Bone range'; pVis.appendChild(boneRangeS.node);
       var hpoT = toggle(!!HPO.on, function (on) { window.__pbx.hpo(on); });
-      pVis.appendChild(row('HP overlay', hpoT.node));
+      pVis.appendChild(row('HP overlay', hpoT.node, 'Angka HP'));
       var rdT = toggle(!!RD.on, function (on) { window.__pbx.radar(on); });
-      pVis.appendChild(row('Radar mini', rdT.node));
+      pVis.appendChild(row('Radar mini', rdT.node, 'Minimap'));
       var trT = toggle(!!TR.on, function (on) { window.__pbx.tracer(on); });
-      pVis.appendChild(row('ESP tracer', trT.node));
-      pVis.appendChild(el('div', 'fk-sec', 'Damage'));
+      pVis.appendChild(row('ESP tracer', trT.node, 'Garis ke musuh'));
+
+      pVis.appendChild(sec('fa-heart-pulse', 'Damage'));
       var dmgS = slider(1.0, 3.0, 0.05, 1.3, function (v) { return 'x' + v.toFixed(2); }, function (v) { if (window.__pbvis) window.__pbvis.dmg(v); });
       dmgS.label.textContent = 'Damage'; pVis.appendChild(dmgS.node);
 
-      /* ============ TAB 3 — GACOR ============ */
+      /* ============ TAB GACOR ============ */
       var pGac = addTab('gacor', 'GACOR');
-      pGac.appendChild(el('div', 'fk-sec', 'Aim Enhancement'));
+      pGac.appendChild(sec('fa-bullseye', 'Aim Enhancement'));
       var predT = toggle(!!PR.on, function (on) { window.__pbx.pred(on, PR.ms); });
-      pGac.appendChild(rowRisk('Prediction (lead)', predT.node, 'anticipate enemy movement'));
+      pGac.appendChild(rowRisk('Prediction (lead)', predT.node, 'Aim ke depan'));
       var predS = slider(0, 400, 10, PR.ms, function (v) { return v.toFixed(0) + 'ms'; }, function (v) { PR.ms = v; if (PR.on) window.__pbx.pred(1, v); });
       predS.label.textContent = 'Lead time'; pGac.appendChild(predS.node);
       var saT = toggle(!!SA.on, function (on) { window.__pbx.silent(on); });
-      pGac.appendChild(rowRisk('Silent aim', saT.node, 'auto aim to head'));
+      pGac.appendChild(rowRisk('Silent aim', saT.node, 'Peluru ke kepala'));
       var tbT = toggle(!!TB.on, function (on) { window.__pbx.trig(on); });
-      pGac.appendChild(rowRisk('Auto trigger', tbT.node, 'fire when enemy enters crosshair'));
-      pGac.appendChild(el('div', 'fk-sec', 'Shooting'));
-      var rapidT = toggle(!!RF.on, function (on) { window.__pbx.rapid(on); });
-      pGac.appendChild(rowRisk('Rapid fire', rapidT.node, 'remove fire delay'));
-      var frT = toggle(!!FR.on, function (on) { window.__pbx.fastReload(on); });
-      pGac.appendChild(rowRisk('Fast reload', frT.node, 'instant reload'));
-      var isT2 = toggle(!!IS.on, function (on) { window.__pbx.instScope(on); });
-      pGac.appendChild(rowRisk('Instant scope', isT2.node, 'scope opens instantly'));
-      pGac.appendChild(el('div', 'fk-sec', 'Combat'));
-      var wallT = toggle(!!FL.wallbang, function (on) { window.__pbx.wallbang(on); });
-      pGac.appendChild(rowRisk('Wallbang', wallT.node, 'bullets penetrate walls'));
-      var ammoT = toggle(!!FL.infAmmo, function (on) { window.__pbx.infAmmo(on); });
-      pGac.appendChild(rowRisk('Infinite ammo', ammoT.node, 'ammo never runs out'));
-      var nrecT = toggle(!!FL.noRecoil, function (on) { window.__pbx.noRecoil(on); });
-      pGac.appendChild(rowRisk('No recoil', nrecT.node, 'zero recoil'));
+      pGac.appendChild(rowRisk('Auto trigger', tbT.node, 'Tembak di musuh'));
 
-      /* ============ TAB 4 — MISC ============ */
+      pGac.appendChild(sec('fa-gun', 'Shooting'));
+      var sfT = toggle(!!SF.on, function (on) { window.__pbx.smoothFire(on); });
+      pGac.appendChild(row('Smooth fire', sfT.node, 'Anti-macet (rekomendasi ON)'));
+      var rapidT = toggle(!!RF.on, function (on) { window.__pbx.rapid(on); });
+      pGac.appendChild(rowRisk('Rapid fire', rapidT.node, 'Hilangkan jeda'));
+      var frT = toggle(!!FR.on, function (on) { window.__pbx.fastReload(on); });
+      pGac.appendChild(rowRisk('Fast reload', frT.node, 'Reload instan'));
+      var isT2 = toggle(!!IS.on, function (on) { window.__pbx.instScope(on); });
+      pGac.appendChild(rowRisk('Instant scope', isT2.node, 'Scope cepat'));
+
+      pGac.appendChild(sec('fa-shield-halved', 'Combat'));
+      var wallT = toggle(!!FL.wallbang, function (on) { window.__pbx.wallbang(on); });
+      pGac.appendChild(rowRisk('Wallbang', wallT.node, 'Tembus dinding'));
+      var ammoT = toggle(!!FL.infAmmo, function (on) { window.__pbx.infAmmo(on); });
+      pGac.appendChild(rowRisk('Infinite ammo', ammoT.node, 'Ammo tak habis'));
+      var nrecT = toggle(!!FL.noRecoil, function (on) { window.__pbx.noRecoil(on); });
+      pGac.appendChild(rowRisk('No recoil', nrecT.node, 'Recoil nol'));
+
+      /* ============ TAB MISC ============ */
       var pMisc = addTab('misc', 'MISC');
-      pMisc.appendChild(el('div', 'fk-sec', 'Quick Swap'));
+      pMisc.appendChild(sec('fa-right-left', 'Quick Swap'));
       var qcT = toggle(!!(window.__pbqc && window.__pbqc.st().on), function (on) { if (on) window.__pbqc.on(); else window.__pbqc.off(); });
-      pMisc.appendChild(row('Quick swap', qcT.node));
+      pMisc.appendChild(row('Quick swap', qcT.node, 'Ganti senjata instan'));
       var qcFastT = toggle(!!(window.__pbqc && window.__pbqc.st().fast), function (on) { window.__pbqc.cfg({ fast: on ? 1 : 0 }); });
-      pMisc.appendChild(row('Instant swap', qcFastT.node, '(risk)'));
-      var swapBtn = el('div', 'fk-btn', 'Swap weapon (Q)');
+      pMisc.appendChild(row('Instant swap', qcFastT.node, 'Skip animasi'));
+      var swapBtn = el('div', 'fk-btn');
+      swapBtn.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i> Swap (Q)';
       swapBtn.addEventListener('click', function () { try { window.__pbqc.swap(); } catch (e) {} });
       var swapWrap = el('div', 'fk-btns');
       swapWrap.appendChild(swapBtn); pMisc.appendChild(swapWrap);
-      pMisc.appendChild(el('div', 'fk-sec', 'Survival'));
-      var irT = toggle(!!IR.on, function (on) { window.__pbx.respawn(on); });
-      pMisc.appendChild(row('Instant respawn', irT.node));
-      var godT = toggle(!!FL.godmode, function (on) { window.__pbx.godmode(on); });
-      pMisc.appendChild(rowRisk('Godmode', godT.node, 'cannot die'));
-      var ncT = toggle(!!FL.noclip, function (on) { window.__pbx.noclip(on); });
-      pMisc.appendChild(rowRisk('Noclip', ncT.node, 'walk through walls'));
-      pMisc.appendChild(el('div', 'fk-sec', 'Utility'));
-      var nadeT = toggle(!!(window.__pbnade && window.__pbnade.is()), function (on) { window.__pbx.nadeAim(on); });
-      pMisc.appendChild(rowRisk('Nade aim', nadeT.node, 'auto-aim grenades'));
-      var akT = toggle(!!FL.antiKick, function (on) { window.__pbx.antiKick(on); });
-      pMisc.appendChild(rowRisk('Anti-kick', akT.node, 'resists kick/ban'));
 
-      /* ============ TAB 5 — INFO ============ */
+      pMisc.appendChild(sec('fa-heart', 'Survival'));
+      var irT = toggle(!!IR.on, function (on) { window.__pbx.respawn(on); });
+      pMisc.appendChild(row('Instant respawn', irT.node, 'Hidup langsung'));
+      var godT = toggle(!!FL.godmode, function (on) { window.__pbx.godmode(on); });
+      pMisc.appendChild(rowRisk('Godmode', godT.node, 'Unlimited spawn flicker'));
+      var ncT = toggle(!!FL.noclip, function (on) { window.__pbx.noclip(on); });
+      pMisc.appendChild(rowRisk('Noclip', ncT.node, 'Tembus dinding'));
+
+      pMisc.appendChild(sec('fa-toolbox', 'Utility'));
+      var nadeT = toggle(!!(window.__pbnade && window.__pbnade.is()), function (on) { window.__pbx.nadeAim(on); });
+      pMisc.appendChild(rowRisk('Nade aim', nadeT.node, 'Grenade auto-target'));
+      var akT = toggle(!!FL.antiKick, function (on) { window.__pbx.antiKick(on); });
+      pMisc.appendChild(rowRisk('Anti-kick', akT.node, 'Blokir kick/ban'));
+
+      /* ============ TAB INFO ============ */
       var pInfo = addTab('info', 'INFO');
-      pInfo.appendChild(el('div', 'fk-sec', 'Status'));
+      pInfo.appendChild(sec('fa-signal', 'Status'));
       var foot = el('div', 'fk-foot', '');
       pInfo.appendChild(foot);
       var statBox = el('div', 'fk-foot', '');
-      statBox.style.marginTop = '4px'; pInfo.appendChild(statBox);
-      pInfo.appendChild(el('div', 'fk-sec', 'Bypass'));
+      statBox.style.marginTop = '3px'; pInfo.appendChild(statBox);
+      pInfo.appendChild(sec('fa-key', 'Bypass'));
       var bypassInfo = el('div', null, '');
-      bypassInfo.style.cssText = 'font-size:10px;line-height:1.5;color:#94a3b8';
-      bypassInfo.innerHTML =
-        '<div>L0 seed · L1 preboot (dual-gate)</div>' +
-        '<div>L2 hide · L3 self-heal · L4 fp-rotate</div>' +
-        '<div>L6 probe-hide</div>';
+      bypassInfo.style.cssText = 'font-size:9px;line-height:1.4;color:#a0aab5';
+      bypassInfo.innerHTML = ''
+        + '<div>L0 seed · L1 preboot</div>'
+        + '<div>L2 hide · L3 self-heal · L4 fp-rotate</div>'
+        + '<div>L6 probe-hide</div>';
       pInfo.appendChild(bypassInfo);
-      pInfo.appendChild(el('div', 'fk-sec', 'Danger'));
-      var resetBtn = el('div', 'fk-btn danger', 'Reset all features');
+      pInfo.appendChild(sec('fa-triangle-exclamation', 'Danger'));
+      var resetBtn = el('div', 'fk-btn danger');
+      resetBtn.innerHTML = '<i class="fa-solid fa-trash-can"></i> Reset semua';
       resetBtn.addEventListener('click', function () {
         try {
-          window.__pb.on(); window.__pbvis.on(); window.__pbnade.on();
+          window.__pb.off(); window.__pbvis.on(); window.__pbnade.on();
           window.__pbqc.on(); window.__pbqc.cfg({ fast: 0 });
           window.__pbx.pred(0); window.__pbx.rapid(0); window.__pbx.fastReload(0);
           window.__pbx.instScope(0); window.__pbx.trig(0); window.__pbx.silent(0);
           window.__pbx.lob(0); window.__pbx.respawn(0); window.__pbx.radar(0);
-          window.__pbx.hpo(0); window.__pbx.fovc(1); window.__pbx.tracer(0);
+          window.__pbx.hpo(0); window.__pbx.fovc(0); window.__pbx.tracer(0);
           window.__pbx.wallbang(1); window.__pbx.infAmmo(1); window.__pbx.noRecoil(1);
           window.__pbx.godmode(0); window.__pbx.noclip(0); window.__pbx.nadeAim(1);
-          window.__pbx.antiKick(1);
+          window.__pbx.antiKick(1); window.__pbx.smoothFire(1);
+          window.__pb.aimbot(0);
           window.__pbvis.bone(0);
           window.__pb.hitbox('head');
           syncAll();
@@ -2090,7 +2125,7 @@
       });
       var resetWrap = el('div', 'fk-btns');
       resetWrap.appendChild(resetBtn); pInfo.appendChild(resetWrap);
-      pInfo.appendChild(el('div', 'fk-warn', 'RISK features may be flagged server-side. Use conservatively in ranked.'));
+      pInfo.appendChild(el('div', 'fk-warn', 'Fitur RISK bisa terdeteksi server.'));
 
       function refreshFoot() {
         try {
@@ -2098,12 +2133,14 @@
           if (!s2) { foot.textContent = 'engine not ready…'; return; }
           var parts = [];
           parts.push(s2.aim ? 'AIM ✓' : 'AIM ✕');
+          parts.push(s2.aimbot ? 'AB ✓' : 'AB ✕');
           parts.push(s2.aimMode === 'legacy' ? 'LEGACY' : 'POV');
           parts.push(s2.hitbox.toUpperCase());
           parts.push(s2.G ? 'G1' : 'G0');
-          parts.push('enemy ' + s2.enemies);
-          parts.push('lock ' + s2.lock);
+          parts.push('en ' + s2.enemies);
+          parts.push('lk ' + s2.lock);
           if (s2.lock) parts.push(s2.dist.toFixed(1) + 'm');
+          if (s2.aimbotActive) parts.push('AB LOCK');
           foot.textContent = parts.join(' · ');
           statBox.textContent = 'bots ' + s2.bots + ' · fire ' + s2.fire + ' · sens ' + s2.sens + ' · fov ' + s2.fov + ' · circle ' + s2.povCircleR.toFixed(0) + 'px';
         } catch (e) { foot.textContent = '…'; }
@@ -2117,6 +2154,9 @@
             povT.set(window.__pb.state().aimMode !== 'legacy');
             povCircleS.set(window.__pb.state().povCircleR);
             hitboxSelect.value = window.__pb.state().hitbox;
+            aimbotT.set(!!window.__pb.state().aimbot);
+            abGainS.set(P.aimbotGain);
+            abHoldS.set(P.aimbotHoldMs);
             updateModeInfo();
           }
           if (window.__pbvis) espT.set(!!window.__pbvis.is());
@@ -2130,12 +2170,13 @@
             trT.set(!!x.tracer);
             wallT.set(!!x.wallbang); ammoT.set(!!x.infAmmo); nrecT.set(!!x.noRecoil);
             godT.set(!!x.godmode); ncT.set(!!x.noclip); nadeT.set(!!x.nadeAim); akT.set(!!x.antiKick);
+            sfT.set(!!x.smoothFire);
           }
         } catch (e) {}
       }
       setInterval(syncAll, 1000);
 
-      /* DRAG via HEADER */
+      /* DRAG */
       (function () {
         var dragging = false, ox = 0, oy = 0;
         head.addEventListener('mousedown', function (e) {
@@ -2181,7 +2222,7 @@
         host.appendChild(panel);
         var lastTab = 'aim';
         try { lastTab = localStorage.getItem(TAB_KEY) || 'aim'; } catch (e) {}
-        if (!tabs[lastTab]) lastTab = 'aim';
+        if (!pages[lastTab]) lastTab = 'aim';
         selectTab(lastTab);
         var collapsed = false;
         try { collapsed = localStorage.getItem('ir_collapsed') === '1'; } catch (e) {}
