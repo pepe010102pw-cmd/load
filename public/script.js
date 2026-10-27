@@ -1694,10 +1694,7 @@
     requestAnimationFrame(tick);
 
     /* ============================================================
-       UI PANEL — minimalis
-       Collapsed: title + tombol "+"
-       Expanded: rail ikon minimal + body rapat
-       Default: Aim Lock OFF, POV Circle OFF, Smooth Fire ON
+       UI PANEL — minimalis + label di rail
        ============================================================ */
     (function pbUI() {
       if (window.__pbUI) return;
@@ -1723,7 +1720,7 @@
         /* EXPANDED */
         '.fk.expanded{display:flex;flex-direction:row}',
         '.fk.expanded .fk-rail{display:flex;flex-direction:column;background:#fafbfc;border-right:1px solid #eef1f4;',
-        '  width:40px;padding:5px 0;gap:2px;flex:0 0 40px;order:0}',
+        '  width:46px;padding:5px 0;gap:2px;flex:0 0 46px;order:0}',
         '.fk.expanded .fk-body-col{order:1;width:290px;display:flex;flex-direction:column;min-width:0}',
         '.fk.expanded .fk-tabbar{display:none}',
 
@@ -1738,9 +1735,11 @@
         '  justify-content:center;font-size:12px;color:#fff;cursor:pointer;background:#7c3aed;font-weight:900;flex:0 0 22px;line-height:1}',
         '.fk-tabbar .fk-tb-open:hover{background:#6d28d9}',
 
-        /* Rail button minimalis (ikon saja) */
-        '.fk-rail .fk-rail-btn{width:32px;height:32px;margin:0 auto;border-radius:6px;display:flex;align-items:center;',
-        '  justify-content:center;font-size:13px;color:#8892a0;cursor:pointer;transition:all .12s}',
+        /* Rail button — ikon + label teks */
+        '.fk-rail .fk-rail-btn{width:42px;height:42px;margin:0 auto;border-radius:6px;display:flex;flex-direction:column;',
+        '  align-items:center;justify-content:center;gap:1px;color:#8892a0;cursor:pointer;transition:all .12s}',
+        '.fk-rail .fk-rail-btn i{font-size:12px;line-height:1}',
+        '.fk-rail .fk-rail-btn span{font-size:7px;font-weight:800;letter-spacing:.2px;line-height:1}',
         '.fk-rail .fk-rail-btn:hover{background:#f0f2f5;color:#7c3aed}',
         '.fk-rail .fk-rail-btn.on{background:#7c3aed;color:#fff}',
 
@@ -1923,7 +1922,7 @@
       function addTab(key, label) {
         var meta = TAB_META[key] || { icon: 'fa-circle', label: label, title: label };
         var tR = el('div', 'fk-rail-btn');
-        tR.innerHTML = '<i class="fa-solid ' + meta.icon + '"></i>';
+        tR.innerHTML = '<i class="fa-solid ' + meta.icon + '"></i><span>' + meta.label + '</span>';
         tR.title = meta.title;
         tR.addEventListener('click', function () { selectTab(key); });
         rail.appendChild(tR);
