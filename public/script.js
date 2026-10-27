@@ -1,6 +1,6 @@
 /* ============================================================
    iRiLLL MODZ — LOGIC.JS
-   version: 2.6.1  (minimal UI + smooth fire + aimbot re-acquire)
+   version: 2.6.2  (aimlock legacy only + aimbot POV-gated)
    License: LOCAL KEYLIST (offline, no pastefy)
    ============================================================ */
 (function () {
@@ -129,7 +129,7 @@
   }
 
   function bootCore() {
-    var V = '2.6.1';
+    var V = '2.6.2';
     var BRAND = 'iRiLLL MODZ';
     function log() { try { console.log.apply(console, ['[iR]'].concat([].slice.call(arguments))); } catch (e) {} }
 
@@ -240,10 +240,9 @@
     try { addEventListener('pbopts', function () { readOpts(); }); } catch (e) {}
 
     try {
-      var _am = localStorage.getItem('ir_aimmode');
-      if (_am === 'legacy' || _am === 'pov') P.aimMode = _am;
+      P.aimMode = 'pov'; /* dipaksa POV */
       var _pr = parseFloat(localStorage.getItem('ir_povcirc'));
-      if (isFinite(_pr) && _pr >= 40) P.povCircleR = _pr;
+      if (isFinite(_pr) && _pr >= 1) P.povCircleR = _pr;
       var _hb = localStorage.getItem('ir_hitbox');
       if (_hb === 'head' || _hb === 'body' || _hb === 'nearest') P.hitbox = _hb;
       var _ab = localStorage.getItem('ir_aimbot');
@@ -258,7 +257,7 @@
     var lastPick = null, st = { v: V, aim: false, G: false, bots: 0, enemies: 0, lock: 0, err: 0, fire: 0, dist: 0, hitbox: P.hitbox, aimbot: 0 };
 
     var AB = { lockUntil: 0, target: null, lastShot: 0, freshFire: 0 };
-    var SF = { on: 1 }; // Smooth fire toggle
+    var SF = { on: 1 };
 
     var DBG = { el: null, n: 0 };
     function dbg(t) {
@@ -404,10 +403,9 @@
       var cp = Math.cos(pitch);
       F.x = -Math.sin(yaw) * cp; F.y = Math.sin(pitch); F.z = -Math.cos(yaw) * cp;
 
-      var useLegacy = (P.aimMode === 'legacy');
       var list = g.bots;
 
-      /* ---------- 1) AIM LOCK (lama) ---------- */
+      /* ---------- 1) AIM LOCK (legacy — lock di mana saja) ---------- */
       var best = null, bestP = null, bestA = 1e9, bestD = 1e9, myTeam = self.team, n = 0, en = 0;
       for (var i = 0; i < list.length; i++) {
         var p = list[i];
@@ -421,10 +419,6 @@
         var d = Math.sqrt(dx * dx + dy * dy + dz * dz);
         if (d < 2 || d > P.reach) continue;
 
-        if (!useLegacy) {
-          if (!isInsidePOVCircle(cam, hp)) continue;
-          if (!hasLineOfSight(g, cam, hp)) continue;
-        }
         en++;
         var ey = wrap(Math.atan2(-dx, -dz) - yaw);
         var ep = Math.asin(clamp(dy / d, -1, 1)) - pitch;
@@ -435,9 +429,9 @@
       }
       st.bots = n; st.enemies = en;
 
-      /* ---------- 2) AIMBOT-ON-FIRE ----------
+      /* ---------- 2) AIMBOT-ON-FIRE (wajib dalam POV circle) ----------
          Acquire target saat: fire baru ditekan, ATAU fire masih ditahan & lock habis.
-         Tidak acquire saat musuh cuma kelihatan (tanpa fire). */
+         Musuh harus berada di dalam POV circle + punya line of sight. */
       var doAimbot = false;
       var wantAcquire = P.aimbotOn && (AB.freshFire || (fireHeld > 0 && now >= AB.lockUntil));
       if (wantAcquire) {
@@ -450,6 +444,7 @@
           var qdx = qp.x - C.x, qdy = qp.y - C.y, qdz = qp.z - C.z;
           var qd = Math.sqrt(qdx*qdx + qdy*qdy + qdz*qdz);
           if (qd < 2 || qd > P.reach) continue;
+          if (!isInsidePOVCircle(cam, qp)) continue;   /* WAJIB dalam POV circle */
           if (!hasLineOfSight(g, cam, qp)) continue;
           if (qd < bestAbD) { bestAbD = qd; bestAb = { bot: q, p: { x: qp.x, y: qp.y, z: qp.z } }; }
         }
@@ -482,11 +477,6 @@
           if (holding) up();
           return;
         }
-        if (!useLegacy) {
-          if (!isInsidePOVCircle(cam, bestP) || !hasLineOfSight(g, cam, bestP)) {
-            lastPick = null; st.lock = 0; if (holding) up(); return;
-          }
-        }
         var t = O.sens * (cam.fov / O.fov) * 0.005;
         if (!(t > 0)) return;
         var ey2 = wrap(Math.atan2(-(bestP.x - C.x), -(bestP.z - C.z)) - yaw);
@@ -507,7 +497,7 @@
       var firePoint = doAimbot && AB.target ? AB.target.p : bestP;
       if (!fireTarget || !firePoint) return;
 
-      if (!useLegacy && !doAimbot) {
+      if (!doAimbot) {
         if (!hasLineOfSight(g, cam, firePoint) && !FL.wallbang) return;
       }
       var hit = null;
@@ -557,11 +547,13 @@
       on: function () { aimOn = true; st.aim = true; return 'on'; },
       off: function () { aimOn = false; st.aim = false; up(); return 'off'; },
       aimMode: function (mode) {
-        if (mode === 'pov' || mode === 'legacy') { P.aimMode = mode; try { localStorage.setItem('ir_aimmode', mode); } catch (e) {} }
+        /* legacy dihapus — selalu POV */
+        P.aimMode = 'pov';
+        try { localStorage.setItem('ir_aimmode', 'pov'); } catch (e) {}
         return P.aimMode;
       },
       povCircle: function (v) {
-        if (typeof v === 'number' && v >= 40) {
+        if (typeof v === 'number' && v >= 1) {
           P.povCircleR = v;
           try { localStorage.setItem('ir_povcirc', String(v)); } catch (e) {}
         }
@@ -1717,14 +1709,12 @@
         '  box-shadow:0 3px 14px rgba(0,0,0,.08);pointer-events:auto;user-select:none;overflow:hidden;transition:width .15s,height .15s}',
         '.fk.hide{display:none}',
 
-        /* EXPANDED */
         '.fk.expanded{display:flex;flex-direction:row}',
         '.fk.expanded .fk-rail{display:flex;flex-direction:column;background:#fafbfc;border-right:1px solid #eef1f4;',
         '  width:46px;padding:5px 0;gap:2px;flex:0 0 46px;order:0}',
         '.fk.expanded .fk-body-col{order:1;width:290px;display:flex;flex-direction:column;min-width:0}',
         '.fk.expanded .fk-tabbar{display:none}',
 
-        /* COLLAPSED */
         '.fk.collapsed{width:auto}',
         '.fk.collapsed .fk-rail{display:none}',
         '.fk.collapsed .fk-body-col{display:none}',
@@ -1735,7 +1725,6 @@
         '  justify-content:center;font-size:12px;color:#fff;cursor:pointer;background:#7c3aed;font-weight:900;flex:0 0 22px;line-height:1}',
         '.fk-tabbar .fk-tb-open:hover{background:#6d28d9}',
 
-        /* Rail button — ikon + label teks */
         '.fk-rail .fk-rail-btn{width:42px;height:42px;margin:0 auto;border-radius:6px;display:flex;flex-direction:column;',
         '  align-items:center;justify-content:center;gap:1px;color:#8892a0;cursor:pointer;transition:all .12s}',
         '.fk-rail .fk-rail-btn i{font-size:12px;line-height:1}',
@@ -1743,7 +1732,6 @@
         '.fk-rail .fk-rail-btn:hover{background:#f0f2f5;color:#7c3aed}',
         '.fk-rail .fk-rail-btn.on{background:#7c3aed;color:#fff}',
 
-        /* Header ramping */
         '.fk-h{display:flex;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid #eef1f4;',
         '  background:#fafbfc;font-weight:700;cursor:move}',
         '.fk-h .dot{width:7px;height:7px;border-radius:50%;background:#7c3aed;flex:0 0 7px}',
@@ -1753,43 +1741,36 @@
         '  width:20px;height:20px;display:flex;align-items:center;justify-content:center;flex:0 0 20px;font-size:10px;background:#7c3aed}',
         '.fk-toggle:hover{background:#6d28d9}',
 
-        /* Body rapat */
         '.fk-body{padding:6px 9px 9px;max-height:60vh;overflow:auto;background:#fff}',
         '.fk-body::-webkit-scrollbar{width:3px}',
         '.fk-body::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:2px}',
         '.fk-page{display:none}',
         '.fk-page.on{display:block}',
 
-        /* Section */
         '.fk-sec{margin:8px 0 4px;font-size:9px;letter-spacing:1px;color:#7c3aed;text-transform:uppercase;opacity:.9;font-weight:800;display:flex;align-items:center;gap:4px}',
         '.fk-sec:first-child{margin-top:0}',
         '.fk-sec i{font-size:10px}',
 
-        /* Rows */
         '.fk-row{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:3px 0}',
         '.fk-row label{flex:1;color:#334155;font-size:11px;line-height:1.25}',
         '.fk-row small{display:block;color:#a0aab5;font-size:9px;line-height:1.15;margin-top:1px}',
         '.fk-row .risk-badge{display:inline-block;padding:0 3px;margin-left:3px;border-radius:2px;font-size:7px;',
         '  background:#f59e0b;color:#fff;font-weight:900;vertical-align:middle;letter-spacing:.2px;line-height:9px}',
 
-        /* Switch kecil */
         '.fk-sw{position:relative;width:32px;height:17px;flex:0 0 32px;border-radius:9px;background:#d4dae1;transition:background .15s;cursor:pointer}',
         '.fk-sw::after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.15);transition:transform .15s}',
         '.fk-sw.on{background:#7c3aed}',
         '.fk-sw.on::after{transform:translateX(15px)}',
 
-        /* Slider rapat */
         '.fk-slider{display:flex;align-items:center;gap:6px;padding:2px 0}',
         '.fk-slider label{flex:0 0 80px;font-size:10px;color:#334155}',
         '.fk-slider input[type=range]{flex:1;height:2px;-webkit-appearance:none;background:#d4dae1;border-radius:2px;outline:none}',
         '.fk-slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:#7c3aed;cursor:pointer}',
         '.fk-slider .n{flex:0 0 42px;text-align:right;font-size:9px;color:#7c3aed;font-variant-numeric:tabular-nums;font-weight:700}',
 
-        /* Select */
         '.fk-select{width:100%;box-sizing:border-box;padding:4px 7px;border:1px solid #cbd5e1;border-radius:5px;font:11px system-ui,sans-serif;outline:none;background:#fff;color:#334155;cursor:pointer;margin-top:2px}',
         '.fk-select:focus{border-color:#7c3aed}',
 
-        /* Buttons */
         '.fk-btns{display:flex;gap:5px;margin-top:5px}',
         '.fk-btn{flex:1;padding:5px 0;text-align:center;border-radius:5px;background:#f1f5f9;border:1px solid #d4dae1;',
         '  color:#334155;cursor:pointer;font-size:10px;transition:background .15s;display:flex;align-items:center;justify-content:center;gap:4px}',
@@ -1799,7 +1780,6 @@
         '.fk-btn.danger{border-color:#fca5a5;background:#fef2f2;color:#b91c1c}',
         '.fk-btn.danger:hover{background:#fee2e2}',
 
-        /* Footer / hint */
         '.fk-foot{margin-top:6px;padding-top:5px;border-top:1px solid #eef1f4;font-size:9px;color:#8892a0;font-variant-numeric:tabular-nums}',
         '.fk-warn{margin-top:5px;padding:4px 6px;border-radius:5px;background:#fffbeb;border:1px solid #fcd34d;',
         '  color:#92400e;font-size:9px;line-height:1.25}',
@@ -1899,8 +1879,8 @@
       panel.appendChild(tabbar);
 
       var TAB_META = {
-        aim:    { icon: 'fa-crosshairs',  label: 'AIM',    title: 'Aim Lock' },
-        aimbot: { icon: 'fa-bullseye',    label: 'AIMBOT', title: 'Aimbot (snap saat fire)' },
+        aim:    { icon: 'fa-crosshairs',  label: 'AIM',    title: 'Aim Lock (legacy)' },
+        aimbot: { icon: 'fa-bullseye',    label: 'AIMBOT', title: 'Aimbot (snap saat fire, POV circle)' },
         vis:    { icon: 'fa-eye',         label: 'ESP',    title: 'Visual ESP' },
         gacor:  { icon: 'fa-bolt',        label: 'GACOR',  title: 'Advanced' },
         misc:   { icon: 'fa-sliders',     label: 'MISC',   title: 'Misc' },
@@ -1942,27 +1922,11 @@
         try { localStorage.setItem(TAB_KEY, key); } catch (e) {}
       }
 
-      /* ============ TAB AIM ============ */
+      /* ============ TAB AIM (aimlock legacy — lock di mana saja) ============ */
       var pAim = addTab('aim', 'AIM');
       pAim.appendChild(sec('fa-crosshairs', 'Mode Aim Lock'));
-      var modeInfo = el('div', 'fk-hint', '');
-      pAim.appendChild(modeInfo);
-      function updateModeInfo() {
-        var badge = (P.aimMode === 'legacy')
-          ? '<span class="fk-badge legacy">LEGACY</span>'
-          : '<span class="fk-badge pov">POV</span>';
-        var desc = (P.aimMode === 'legacy')
-          ? 'Aim lama: target di mana saja.'
-          : 'Target wajib masuk POV circle & terlihat.';
-        modeInfo.innerHTML = badge + ' ' + desc;
-      }
-      updateModeInfo();
-
-      var povT = toggle(P.aimMode !== 'legacy', function (on) {
-        window.__pb.aimMode(on ? 'pov' : 'legacy');
-        updateModeInfo();
-      });
-      pAim.appendChild(row('POV mode', povT.node, 'Lock hanya dalam lingkaran'));
+      pAim.appendChild(el('div', 'fk-hint',
+        'Aim lock mode lama: lock musuh di mana saja (tanpa POV circle).'));
 
       pAim.appendChild(sec('fa-bullseye', 'Titik Tembak'));
       var hitboxSelect = el('select', 'fk-select');
@@ -1976,17 +1940,17 @@
 
       pAim.appendChild(sec('fa-lock', 'Aim Lock'));
       var aimT = toggle(!!(window.__pb && window.__pb.state().aim), function (on) { if (on) window.__pb.on(); else window.__pb.off(); });
-      pAim.appendChild(row('Aim lock', aimT.node, 'Auto-lock saat target masuk POV'));
+      pAim.appendChild(row('Aim lock', aimT.node, 'Auto-lock (legacy)'));
       var autoFireT = toggle(!!P.autoFire, function (on) { P.autoFire = on ? 1 : 0; });
       pAim.appendChild(row('Auto fire', autoFireT.node, 'Tembak otomatis saat lock'));
       var invertT = toggle(!!O.invert, function (on) { O.invert = on; });
       pAim.appendChild(row('Invert Y', invertT.node, 'Balik arah vertikal'));
 
-      /* ============ TAB AIMBOT ============ */
+      /* ============ TAB AIMBOT (snap saat fire, WAJIB POV circle) ============ */
       var pAb = addTab('aimbot', 'AIMBOT');
       pAb.appendChild(sec('fa-bullseye', 'Aimbot (snap saat fire)'));
       pAb.appendChild(el('div', 'fk-hint',
-        'Kamera tidak lock sebelum tembak. Snap saat kamu fire. Tanpa FOV.'));
+        'Kamera tidak lock sebelum tembak. Snap saat kamu fire. Hanya musuh di dalam POV circle.'));
       var aimbotT = toggle(!!P.aimbotOn, function (on) { window.__pb.aimbot(on); });
       pAb.appendChild(rowRisk('Enable aimbot', aimbotT.node, 'Snap saat fire'));
 
@@ -2000,18 +1964,18 @@
         function (v) { window.__pb.aimbotHold(v); });
       abHoldS.label.textContent = 'Lock duration'; pAb.appendChild(abHoldS.node);
 
-      /* ============ TAB ESP ============ */
-      var pVis = addTab('vis', 'ESP');
-      pVis.appendChild(sec('fa-circle-notch', 'POV Circle'));
+      pAb.appendChild(sec('fa-circle-notch', 'POV Circle'));
       var fcT = toggle(!!FC.on, function (on) { window.__pbx.fovc(on); });
-      pVis.appendChild(row('Show circle', fcT.node, 'Ring visual'));
+      pAb.appendChild(row('Show circle', fcT.node, 'Ring visual'));
 
-      var povCircleS = slider(40, 2000, 10, P.povCircleR,
+      var povCircleS = slider(1, 1500, 1, P.povCircleR,
         function (v) { return v.toFixed(0) + 'px'; },
         function (v) { window.__pb.povCircle(v); });
       povCircleS.label.textContent = 'Circle size';
-      pVis.appendChild(povCircleS.node);
+      pAb.appendChild(povCircleS.node);
 
+      /* ============ TAB ESP ============ */
+      var pVis = addTab('vis', 'ESP');
       pVis.appendChild(sec('fa-layer-group', 'Overlay'));
       var espT = toggle(!!(window.__pbvis && window.__pbvis.is()), function (on) { if (on) window.__pbvis.on(); else window.__pbvis.off(); });
       pVis.appendChild(row('Enemy ESP', espT.node, 'Box + HP bar'));
@@ -2133,7 +2097,7 @@
           var parts = [];
           parts.push(s2.aim ? 'AIM ✓' : 'AIM ✕');
           parts.push(s2.aimbot ? 'AB ✓' : 'AB ✕');
-          parts.push(s2.aimMode === 'legacy' ? 'LEGACY' : 'POV');
+          parts.push('POV');
           parts.push(s2.hitbox.toUpperCase());
           parts.push(s2.G ? 'G1' : 'G0');
           parts.push('en ' + s2.enemies);
@@ -2150,13 +2114,11 @@
         try {
           if (window.__pb) {
             aimT.set(!!window.__pb.state().aim);
-            povT.set(window.__pb.state().aimMode !== 'legacy');
             povCircleS.set(window.__pb.state().povCircleR);
             hitboxSelect.value = window.__pb.state().hitbox;
             aimbotT.set(!!window.__pb.state().aimbot);
             abGainS.set(P.aimbotGain);
             abHoldS.set(P.aimbotHoldMs);
-            updateModeInfo();
           }
           if (window.__pbvis) espT.set(!!window.__pbvis.is());
           if (window.__pbqc) { var q = window.__pbqc.st(); qcT.set(!!q.on); qcFastT.set(!!q.fast); }
