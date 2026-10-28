@@ -17,7 +17,7 @@
 
   var PF_LOCAL_KEYS = [
     'IRILMODZPREMIUM','IRIL-VIP-MODZ','IRIL-ABCD-1234','IRIL-EFGH-5678','IRIL-IJKL-9012',
-    'my key 123','abc','k','🔥PREMIUM🔥'
+    'my key 123','abc','k','IRILMODZ7DAY'
   ];
 
   function pfGet(k, d) { try { var v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } }
