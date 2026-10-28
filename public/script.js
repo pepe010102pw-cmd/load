@@ -1,6 +1,6 @@
 /* ============================================================
    iRiLLL MODZ — LOGIC.JS
-   version: 2.8.0  (aimlock/aimbot fixed via direct state write)
+   version: 2.8.1  (integrity bypass + crossCv + zoom fix)
    License: LOCAL KEYLIST (offline, no pastefy)
    ============================================================ */
 (function () {
@@ -129,12 +129,12 @@
   }
 
   function bootCore() {
-    var V = '2.8.0';
+    var V = '2.8.1';
     var BRAND = 'iRiLLL MODZ';
     function log() { try { console.log.apply(console, ['[iR]'].concat([].slice.call(arguments))); } catch (e) {} }
 
     /* ============================================================
-       L1 PREBOOT — bypass gate di bundle (flexible qa/ji/Ui)
+       PREBOOT — patch integrity + gate (sync dengan v2.8.1)
        ============================================================ */
     (function preboot() {
       try {
@@ -157,15 +157,25 @@
         if (!bm) return;
         var bsrc = xget(new URL(bm[1], location.href).href, '*/*');
 
+        /* --- PATCH 1: integrity check (anti-blob) --- */
+        var integrityRe = /if\(!\(\(\)=>\{try\{const e=document\.currentScript,t=e&&e\.src&&new URL\(e\.src\);return!!t&&t\.origin===location\.origin&&"\/static\/game\/bundle\.js"===t\.pathname\}catch\(e\)\{return!1\}\}\)\(\)\)\{try\{location\.replace\("\/"\)\}catch\(t\)\{\}throw new Error\("pb"\)\}/;
+        if (integrityRe.test(bsrc)) {
+          bsrc = bsrc.replace(integrityRe, 'if(0){}');
+          log('integrity check disabled');
+        } else {
+          /* Fallback longgar */
+          bsrc = bsrc.replace(/throw new Error\("pb"\)/g, 'void 0');
+          log('integrity check fallback applied');
+        }
+
+        /* --- PATCH 2: gate (flex: qa/ji/Ui) --- */
         var gateFlex = /([A-Za-z_$][\w$]*)="localhost"===location\.hostname\|\|"127\.0\.0\.1"===location\.hostname\|\|"\[::1\]"===location\.hostname/g;
-        var patched = false;
-        var foundIds = [];
+        var patched = false, foundIds = [];
         bsrc = bsrc.replace(gateFlex, function (full, ident) {
           foundIds.push(ident);
           patched = true;
           return ident + '=!0';
         });
-
         if (!patched) {
           var gateUi = /const\s+([A-Za-z_$][\w$]*)="localhost"===location\.hostname\|\|"127\.0\.0\.1"===location\.hostname\|\|"\[::1\]"===location\.hostname,/;
           var mUi = gateUi.exec(bsrc);
@@ -175,7 +185,6 @@
             patched = true;
           }
         }
-
         if (!patched) { log('gate tidak cocok, abort'); return; }
         log('gate patched:', foundIds.join(', '));
 
@@ -279,17 +288,11 @@
     var AB = { lockUntil: 0, target: null, lastShot: 0, freshFire: 0 };
     var SF = { on: 1 };
 
-    /* ============================================================
-       DIRECT AIM INJECTOR — bypass isTrusted
-       ============================================================ */
+    /* DIRECT AIM INJECTOR */
     var AIM = { dx: 0, dy: 0, queued: false };
     var AIMLOCK = { on: false, targetYaw: 0, targetPitch: 0, locked: false, smooth: 1.0 };
 
-    function aimWrite(dx, dy) {
-      AIM.dx += dx;
-      AIM.dy += dy;
-      AIM.queued = true;
-    }
+    function aimWrite(dx, dy) { AIM.dx += dx; AIM.dy += dy; AIM.queued = true; }
     function aimFlush(g) {
       if (!AIM.queued) return;
       AIM.queued = false;
@@ -364,43 +367,30 @@
     function wrap(a) { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; }
     function wpos(b, out) { var e = b.matrixWorld.elements; out.x = e[12]; out.y = e[13]; out.z = e[14]; return out; }
     var A = { x: 0, y: 0, z: 0 }, B = { x: 0, y: 0, z: 0 };
-
     var _hpOut = { x: 0, y: 0, z: 0 };
     var _pv = null, _pDir = { x: 0, y: 0, z: 0 };
 
-    /* Visual head point (untuk ESP) */
     function headPoint(p) {
       var by = p.c && p.c.byName; if (!by) return null;
       var h = by.Head || by.head || null, g = by.Bone_HeadGearAttach || null;
       if (!h && !g) return null;
-      if (h && g) {
-        wpos(h, A); wpos(g, B);
-        _hpOut.x = (A.x + B.x) * .5; _hpOut.y = (A.y + B.y) * .5; _hpOut.z = (A.z + B.z) * .5;
-      } else { wpos(h || g, _hpOut); }
+      if (h && g) { wpos(h, A); wpos(g, B); _hpOut.x = (A.x + B.x) * .5; _hpOut.y = (A.y + B.y) * .5; _hpOut.z = (A.z + B.z) * .5; }
+      else wpos(h || g, _hpOut);
       return _hpOut;
     }
     function bodyPoint(p) {
       var by = p.c && p.c.byName; if (!by) return null;
-      var h = by.Spine2 || by.Spine1 || by.Pelvis || by.Neck;
-      if (!h) return null;
-      wpos(h, _hpOut);
-      return _hpOut;
+      var h = by.Spine2 || by.Spine1 || by.Pelvis || by.Neck; if (!h) return null;
+      wpos(h, _hpOut); return _hpOut;
     }
-    /* Logical head point (untuk AIM — tidak lag) */
     function headPointLogical(p) {
-      var s = p && p.mover && p.mover.pos;
-      if (!s) return null;
-      _hpOut.x = s.x;
-      _hpOut.y = s.y + (p.mover.crouch ? 1.25 : 1.8);
-      _hpOut.z = s.z;
+      var s = p && p.mover && p.mover.pos; if (!s) return null;
+      _hpOut.x = s.x; _hpOut.y = s.y + (p.mover.crouch ? 1.25 : 1.8); _hpOut.z = s.z;
       return _hpOut;
     }
     function bodyPointLogical(p) {
-      var s = p && p.mover && p.mover.pos;
-      if (!s) return null;
-      _hpOut.x = s.x;
-      _hpOut.y = s.y + (p.mover.crouch ? 0.85 : 1.2);
-      _hpOut.z = s.z;
+      var s = p && p.mover && p.mover.pos; if (!s) return null;
+      _hpOut.x = s.x; _hpOut.y = s.y + (p.mover.crouch ? 0.85 : 1.2); _hpOut.z = s.z;
       return _hpOut;
     }
     function getTargetPointVisual(p) {
@@ -437,8 +427,7 @@
         if (!(ndc.z > -1 && ndc.z < 1)) return false;
         var px = ndc.x * (innerWidth / 2);
         var py = -ndc.y * (innerHeight / 2);
-        var distPx = Math.sqrt(px * px + py * py);
-        return distPx <= P.povCircleR;
+        return Math.sqrt(px*px + py*py) <= P.povCircleR;
       } catch (e) { return false; }
     }
     function hasLineOfSight(g, cam, hp) {
@@ -446,11 +435,10 @@
         if (typeof g.cast !== 'function') return true;
         var eye = cam.position;
         var dx = hp.x - eye.x, dy = hp.y - eye.y, dz = hp.z - eye.z;
-        var dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        var dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
         if (!(dist > 0.5)) return false;
-        _pDir.x = dx / dist; _pDir.y = dy / dist; _pDir.z = dz / dist;
-        var hit = g.cast(eye, _pDir, dist - 0.35);
-        return !hit;
+        _pDir.x = dx/dist; _pDir.y = dy/dist; _pDir.z = dz/dist;
+        return !g.cast(eye, _pDir, dist - 0.35);
       } catch (e) { return true; }
     }
     function isBotReal(p) {
@@ -463,15 +451,12 @@
     function hitTestSafe(p, o, d, m) {
       if (!p || p.dead) return null;
       if (p.remote && !p.net && p.isBot) {
-        var old = p.remote;
-        p.remote = false;
-        try { return p.hitTest(o, d, m); }
-        finally { p.remote = old; }
+        var old = p.remote; p.remote = false;
+        try { return p.hitTest(o, d, m); } finally { p.remote = old; }
       }
       return p.hitTest(o, d, m);
     }
 
-    /* Snapshot dispatch untuk fire event — game block isTrusted, tapi kita butuh mousedown untuk fire */
     function move(dx, dy) {
       try {
         var ev = new MouseEvent('mousemove', { bubbles: true, cancelable: true, movementX: dx, movementY: dy });
@@ -481,14 +466,10 @@
       } catch (e) {}
     }
     function down() {
-      /* Fire event juga di-block isTrusted. Jadi set trigger langsung via state. */
       try {
         var g = G || game();
-        if (g && g.P && g.P.s && !g.P.s.dead) {
-          // Panggil fire handler internal via game.fire()
-          if (typeof g.fire === 'function') {
-            try { g.fire(); } catch (e) {}
-          }
+        if (g && g.P && g.P.s && !g.P.s.dead && typeof g.fire === 'function') {
+          try { g.fire(); } catch (e) {}
         }
       } catch (e) {}
       try { (document.body || document.documentElement).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })); } catch (e) {}
@@ -498,9 +479,7 @@
       try { (document.body || document.documentElement).dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 })); } catch (e) {}
       try {
         var g = G || game();
-        if (g && typeof g.release === 'function') {
-          try { g.release(); } catch (e) {}
-        }
+        if (g && typeof g.release === 'function') { try { g.release(); } catch (e) {} }
       } catch (e) {}
       holding = false;
     }
@@ -544,7 +523,7 @@
 
       var list = g.bots;
 
-      /* 1) AIM LOCK legacy — pakai logical point */
+      /* 1) AIM LOCK legacy */
       var best = null, bestP = null, bestA = 1e9, bestD = 1e9, myTeam = self.team, n = 0, en = 0;
       for (var i = 0; i < list.length; i++) {
         var p = list[i];
@@ -552,23 +531,21 @@
         n++;
         if (p.team === myTeam) continue;
         if (p === self) continue;
-
         var hp = getTargetPointLogical(p); if (!hp) continue;
         var dx = hp.x - C.x, dy = hp.y - C.y, dz = hp.z - C.z;
-        var d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        var d = Math.sqrt(dx*dx + dy*dy + dz*dz);
         if (d < 2 || d > P.reach) continue;
-
         en++;
         var ey = wrap(Math.atan2(-dx, -dz) - yaw);
-        var ep = Math.asin(clamp(dy / d, -1, 1)) - pitch;
-        var a = Math.sqrt(ey * ey + ep * ep);
+        var ep = Math.asin(clamp(dy/d, -1, 1)) - pitch;
+        var a = Math.sqrt(ey*ey + ep*ep);
         if (a > P.cone) continue;
         var better = (P.mode === 'angle') ? (a < bestA) : (d < bestD - P.bias || (d <= bestD + P.bias && a < bestA));
         if (better) { bestA = a; bestD = d; best = p; bestP = { x: hp.x, y: hp.y, z: hp.z }; }
       }
       st.bots = n; st.enemies = en;
 
-      /* 2) AIMBOT-ON-FIRE — POV circle pakai logical point */
+      /* 2) AIMBOT-ON-FIRE */
       var doAimbot = false;
       var wantAcquire = P.aimbotOn && (AB.freshFire || (fireHeld > 0 && now >= AB.lockUntil));
       if (wantAcquire) {
@@ -585,55 +562,44 @@
           if (!hasLineOfSight(g, cam, qp)) continue;
           if (qd < bestAbD) { bestAbD = qd; bestAb = { bot: q, p: { x: qp.x, y: qp.y, z: qp.z } }; }
         }
-        if (bestAb) {
-          AB.target = bestAb;
-          AB.lockUntil = now + P.aimbotHoldMs;
-          AB.lastShot = now;
-        }
+        if (bestAb) { AB.target = bestAb; AB.lockUntil = now + P.aimbotHoldMs; AB.lastShot = now; }
       }
-      if (AB.target && now < AB.lockUntil) doAimbot = true;
-      else AB.target = null;
+      if (AB.target && now < AB.lockUntil) doAimbot = true; else AB.target = null;
 
-      /* 3) Terapkan aim — pakai AIMLOCK absolute snap */
+      /* 3) Apply aim */
       if (doAimbot && AB.target) {
         var ap = AB.target.p;
         var tYawAb   = Math.atan2(-(ap.x - C.x), -(ap.z - C.z));
         var tPitchAb = Math.asin(clamp((ap.y - C.y) / Math.max(0.001, Math.hypot(ap.x - C.x, ap.y - C.y, ap.z - C.z)), -1, 1));
         while (tYawAb >  Math.PI) tYawAb -= 2 * Math.PI;
         while (tYawAb < -Math.PI) tYawAb += 2 * Math.PI;
-        var rawY = self.__pbYawRaw || 0;
-        var rawP = self.__pbPitchRaw || 0;
+        var rawY = self.__pbYawRaw || 0, rawP = self.__pbPitchRaw || 0;
         var k = Math.min(1, Math.max(0.15, P.aimbotGain * 0.5));
-        AIMLOCK.on = true;
-        AIMLOCK.locked = true;
+        AIMLOCK.on = true; AIMLOCK.locked = true;
         AIMLOCK.targetYaw   = rawY + wrap(tYawAb - rawY) * k;
         AIMLOCK.targetPitch = rawP + (tPitchAb - rawP) * k;
         st.aimbot = 1;
       } else {
         st.aimbot = 0;
         if (!best || !aimOn) {
-          AIMLOCK.locked = false;
-          lastPick = null; st.lock = 0;
+          AIMLOCK.locked = false; lastPick = null; st.lock = 0;
           if (holding) up();
           aimFlush(g);
           return;
         }
-        /* AIM LOCK — snap absolute */
         var tYaw   = Math.atan2(-(bestP.x - C.x), -(bestP.z - C.z));
         var tPitch = Math.asin(clamp((bestP.y - C.y) / Math.max(0.001, bestD), -1, 1));
         while (tYaw >  Math.PI) tYaw -= 2 * Math.PI;
         while (tYaw < -Math.PI) tYaw += 2 * Math.PI;
-        var rawY2 = self.__pbYawRaw || 0;
-        var rawP2 = self.__pbPitchRaw || 0;
+        var rawY2 = self.__pbYawRaw || 0, rawP2 = self.__pbPitchRaw || 0;
         var kk = Math.min(1, Math.max(0.05, P.gain));
-        AIMLOCK.on = true;
-        AIMLOCK.locked = true;
+        AIMLOCK.on = true; AIMLOCK.locked = true;
         AIMLOCK.targetYaw   = rawY2 + wrap(tYaw - rawY2) * kk;
         AIMLOCK.targetPitch = rawP2 + (tPitch - rawP2) * kk;
         st.err = bestA; st.dist = bestD; st.lock = 1; lastPick = best;
       }
 
-      /* 4) Fire handling */
+      /* 4) Fire */
       if (!(P.autoFire || fireHeld) || now < nextTap || holding) {
         if (P.aimbotOn && fireHeld > 0) AB.lastShot = now;
         aimFlush(g);
@@ -662,7 +628,6 @@
       aimFlush(g);
     }
 
-    /* Fallback tinggi: flush delta aim via setInterval untuk lawan game overwrite */
     setInterval(function () { try { var g = G || game(); if (g) aimFlush(g); } catch (e) {} }, 4);
 
     function buzz(p) { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} }
@@ -677,9 +642,7 @@
       try { if (!window.__pbx && HIDDEN.pbx) { try { window.__pbx = HIDDEN.pbx; } catch (e) {} } } catch (e) {}
     }, 2000);
 
-    var FL = {
-      wallbang: 1, infAmmo: 1, noRecoil: 1, godmode: 0, noclip: 0, nadeAim: 1, antiKick: 1
-    };
+    var FL = { wallbang: 1, infAmmo: 1, noRecoil: 1, godmode: 0, noclip: 0, nadeAim: 1, antiKick: 1 };
 
     var PB_API = {
       state: function () {
@@ -696,83 +659,38 @@
       on: function () { aimOn = true; st.aim = true; return 'on'; },
       off: function () { aimOn = false; st.aim = false; AIMLOCK.locked = false; up(); return 'off'; },
       aimMode: function (mode) { P.aimMode = 'pov'; try { localStorage.setItem('ir_aimmode', 'pov'); } catch (e) {} return P.aimMode; },
-      povCircle: function (v) {
-        if (typeof v === 'number' && v >= 1) {
-          P.povCircleR = v;
-          try { localStorage.setItem('ir_povcirc', String(v)); } catch (e) {}
-        }
-        return P.povCircleR;
-      },
-      hitbox: function (v) {
-        if (v === 'head' || v === 'body' || v === 'nearest') {
-          P.hitbox = v; st.hitbox = v;
-          try { localStorage.setItem('ir_hitbox', v); } catch (e) {}
-        }
-        return P.hitbox;
-      },
-      aimbot: function (on) {
-        P.aimbotOn = on ? 1 : 0;
-        if (!P.aimbotOn) { AB.target = null; AIMLOCK.locked = false; }
-        try { localStorage.setItem('ir_aimbot', P.aimbotOn ? '1' : '0'); } catch (e) {}
-        return P.aimbotOn;
-      },
-      aimbotGain: function (v) {
-        if (typeof v === 'number' && v > 0) {
-          P.aimbotGain = v;
-          try { localStorage.setItem('ir_aimbot_gain', String(v)); } catch (e) {}
-        }
-        return P.aimbotGain;
-      },
-      aimbotHold: function (v) {
-        if (typeof v === 'number' && v >= 50) {
-          P.aimbotHoldMs = v;
-          try { localStorage.setItem('ir_aimbot_hold', String(v)); } catch (e) {}
-        }
-        return P.aimbotHoldMs;
-      },
-      list: function () {
-        var g = game(); if (!g) return 'no G';
-        return (g.bots || []).map(function (p) {
-          return { id: p.id, team: p.team, my: p.team === g.P.s.team, dead: !!p.dead, hp: p.hp, vis: p.obj && p.obj.visible, bot: !!p.isBot, remote: !!p.remote, hasNet: !!p.net };
-        });
-      },
-      head: function () {
-        var hp = lastPick && getTargetPointLogical(lastPick);
-        return hp ? { x: +hp.x.toFixed(2), y: +hp.y.toFixed(2), z: +hp.z.toFixed(2), team: lastPick.team, hp: lastPick.hp } : null;
-      },
-      /* Diagnostic: paksa aim ke koordinat world */
+      povCircle: function (v) { if (typeof v === 'number' && v >= 1) { P.povCircleR = v; try { localStorage.setItem('ir_povcirc', String(v)); } catch (e) {} } return P.povCircleR; },
+      hitbox: function (v) { if (v === 'head' || v === 'body' || v === 'nearest') { P.hitbox = v; st.hitbox = v; try { localStorage.setItem('ir_hitbox', v); } catch (e) {} } return P.hitbox; },
+      aimbot: function (on) { P.aimbotOn = on ? 1 : 0; if (!P.aimbotOn) { AB.target = null; AIMLOCK.locked = false; } try { localStorage.setItem('ir_aimbot', P.aimbotOn ? '1' : '0'); } catch (e) {} return P.aimbotOn; },
+      aimbotGain: function (v) { if (typeof v === 'number' && v > 0) { P.aimbotGain = v; try { localStorage.setItem('ir_aimbot_gain', String(v)); } catch (e) {} } return P.aimbotGain; },
+      aimbotHold: function (v) { if (typeof v === 'number' && v >= 50) { P.aimbotHoldMs = v; try { localStorage.setItem('ir_aimbot_hold', String(v)); } catch (e) {} } return P.aimbotHoldMs; },
+      list: function () { var g = game(); if (!g) return 'no G'; return (g.bots || []).map(function (p) { return { id: p.id, team: p.team, my: p.team === g.P.s.team, dead: !!p.dead, hp: p.hp, vis: p.obj && p.obj.visible, bot: !!p.isBot, remote: !!p.remote, hasNet: !!p.net }; }); },
+      head: function () { var hp = lastPick && getTargetPointLogical(lastPick); return hp ? { x: +hp.x.toFixed(2), y: +hp.y.toFixed(2), z: +hp.z.toFixed(2), team: lastPick.team, hp: lastPick.hp } : null; },
       aimAt: function (x, y, z) {
         var g = G || game(); if (!g || !g.P || !g.P.s) return 'no G';
-        var s = g.P.s;
         var cam = g.camera.matrixWorld.elements;
         var cx = cam[12], cy = cam[13], cz = cam[14];
         var tYaw   = Math.atan2(-(x - cx), -(z - cz));
         var tPitch = Math.asin(clamp((y - cy) / Math.max(0.001, Math.hypot(x - cx, y - cy, z - cz)), -1, 1));
-        AIMLOCK.locked = true;
-        AIMLOCK.targetYaw = tYaw;
-        AIMLOCK.targetPitch = tPitch;
+        AIMLOCK.locked = true; AIMLOCK.targetYaw = tYaw; AIMLOCK.targetPitch = tPitch;
         return { yaw: tYaw, pitch: tPitch };
       },
       unlock: function () { AIMLOCK.locked = false; return 'unlocked'; }
     };
     window.__pb = PB_API; HIDDEN.pb = PB_API;
 
-    /* ESP */
+    /* ====== ESP ====== */
     var E = { on: 1, wrap: null, host: null, hostAt: 0, slots: [], last: 0, n: 0 };
     function eInit() {
       if (E.wrap && E.wrap.parentNode) return true;
-      var host = document.body || document.documentElement;
-      if (!host) return false;
+      var host = document.body || document.documentElement; if (!host) return false;
       var w = document.createElement('div');
       w.setAttribute('data-pb', '1');
       w.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;overflow:hidden;pointer-events:none;z-index:2147483000';
-      host.appendChild(w);
-      E.wrap = w; E.slots = [];
-      return true;
+      host.appendChild(w); E.wrap = w; E.slots = []; return true;
     }
     function eSlot(i) {
-      var s = E.slots[i];
-      if (s) return s;
+      var s = E.slots[i]; if (s) return s;
       var box = document.createElement('div');
       box.style.cssText = 'position:absolute;left:0;top:0;box-sizing:border-box;border:1px solid rgba(0,200,90,.9);border-radius:1px;display:none;will-change:transform';
       var hb = document.createElement('div');
@@ -785,10 +703,7 @@
       var tx = document.createElement('div');
       tx.style.cssText = 'position:absolute;right:0;top:-15px;font:10px/12px Tahoma,sans-serif;color:#0a5c2a;text-shadow:0 1px 2px #fff;white-space:nowrap;font-weight:700';
       box.appendChild(hb); box.appendChild(dot); box.appendChild(tx);
-      E.wrap.appendChild(box);
-      s = { box: box, hp: hf, tx: tx };
-      E.slots[i] = s;
-      return s;
+      E.wrap.appendChild(box); s = { box: box, hp: hf, tx: tx }; E.slots[i] = s; return s;
     }
     function eClear() { for (var i = 0; i < E.slots.length; i++) E.slots[i].box.style.display = 'none'; E.n = 0; }
     function eHost() {
@@ -798,12 +713,11 @@
       var best = null, ba = 0, cs = document.getElementsByTagName('canvas');
       for (var i = 0; i < cs.length; i++) {
         var c = cs[i];
-        if (c.getAttribute('data-pb')) continue;
+        if (c.getAttribute('data-pb') || c.id === 'crossCv') continue;
         var r = c.getBoundingClientRect(), a = r.width * r.height;
         if (a > ba) { ba = a; best = c; }
       }
-      E.host = best || null;
-      return E.host;
+      E.host = best || null; return E.host;
     }
     function eProj(cam, r, x, y, z) {
       if (!E.v) { try { E.v = cam.position.clone(); } catch (e) { return null; } }
@@ -814,10 +728,8 @@
     function eDraw(g) {
       var cam = g.camera, list = g.bots, self = g.P && g.P.s;
       if (!list || !cam || !self || self.dead) { eClear(); return; }
-      var host = eHost();
-      if (!host) { eClear(); return; }
-      var r = host.getBoundingClientRect();
-      if (!(r.width > 0)) { eClear(); return; }
+      var host = eHost(); if (!host) { eClear(); return; }
+      var r = host.getBoundingClientRect(); if (!(r.width > 0)) { eClear(); return; }
       var me = cam.matrixWorld && cam.matrixWorld.elements;
       var cx = me ? me[12] : 0, cy = me ? me[13] : 0, cz = me ? me[14] : 0;
       var my = self.team, idx = 0;
@@ -830,8 +742,7 @@
         var mm = p.obj.matrixWorld && p.obj.matrixWorld.elements; if (!mm) continue;
         var a = eProj(cam, r, hp.x, hp.y, hp.z), b = eProj(cam, r, mm[12], mm[13], mm[14]);
         if (!a || !b) continue;
-        var bh = b.y - a.y;
-        if (!(bh > 6)) continue;
+        var bh = b.y - a.y; if (!(bh > 6)) continue;
         if (a.x < r.left - 60 || a.x > r.left + r.width + 60 || b.y < r.top - 60 || a.y > r.top + r.height + 60) continue;
         var bw = bh * 0.42; if (bw > 400) bw = 400;
         var s = eSlot(idx++);
@@ -844,13 +755,13 @@
         s.hp.style.width = (f * 100).toFixed(0) + '%';
         s.hp.style.background = f > 0.5 ? '#2cc76a' : (f > 0.25 ? '#f5b942' : '#ff3b30');
         var dx = hp.x - cx, dy = hp.y - cy, dz = hp.z - cz;
-        s.tx.textContent = Math.round(Math.sqrt(dx * dx + dy * dy + dz * dz)) + 'm';
+        s.tx.textContent = Math.round(Math.sqrt(dx*dx + dy*dy + dz*dz)) + 'm';
       }
       for (; idx < E.slots.length; idx++) E.slots[idx].box.style.display = 'none';
       E.n = idx;
     }
 
-    /* BONE ESP */
+    /* ====== BONE ESP ====== */
     var BE = { on: 0, wrap: null, host: null, hostAt: 0, last: 0, range: 60 };
     var BONE_PAIRS = [
       ['Head','Neck'],['Neck','Spine3'],['Spine3','Spine2'],['Spine2','Spine1'],['Spine1','Pelvis'],
@@ -861,14 +772,11 @@
     ];
     function beInit() {
       if (BE.wrap && BE.wrap.parentNode) return true;
-      var host = document.body || document.documentElement;
-      if (!host) return false;
+      var host = document.body || document.documentElement; if (!host) return false;
       var w = document.createElement('canvas');
       w.setAttribute('data-pb', '1');
       w.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:2147482999';
-      host.appendChild(w);
-      BE.wrap = w; BE.ctx = w.getContext('2d');
-      return true;
+      host.appendChild(w); BE.wrap = w; BE.ctx = w.getContext('2d'); return true;
     }
     function beClear() { if (BE.ctx && BE.wrap) { BE.ctx.clearRect(0, 0, BE.wrap.width, BE.wrap.height); } }
     function beHost() {
@@ -878,12 +786,11 @@
       var best = null, ba = 0, cs = document.getElementsByTagName('canvas');
       for (var i = 0; i < cs.length; i++) {
         var c = cs[i];
-        if (c.getAttribute('data-pb')) continue;
+        if (c.getAttribute('data-pb') || c.id === 'crossCv') continue;
         var r = c.getBoundingClientRect(), a = r.width * r.height;
         if (a > ba) { ba = a; best = c; }
       }
-      BE.host = best || null;
-      return BE.host;
+      BE.host = best || null; return BE.host;
     }
     function beProject(cam, r, b, out) {
       if (!BE._v) { try { BE._v = cam.position.clone(); } catch (e) { return false; } }
@@ -899,22 +806,17 @@
       var cam = g.camera, list = g.bots, self = g.P && g.P.s;
       if (!list || !cam || !self || self.dead) { beClear(); return; }
       if (!beInit()) return;
-      var host = beHost();
-      if (!host) { beClear(); return; }
-      var r = host.getBoundingClientRect();
-      if (!(r.width > 0)) { beClear(); return; }
+      var host = beHost(); if (!host) { beClear(); return; }
+      var r = host.getBoundingClientRect(); if (!(r.width > 0)) { beClear(); return; }
       var dpr = Math.min(2, devicePixelRatio || 1);
       var w = Math.round(innerWidth * dpr), h = Math.round(innerHeight * dpr);
       if (BE.wrap.width !== w || BE.wrap.height !== h) { BE.wrap.width = w; BE.wrap.height = h; }
       var ctx = BE.ctx;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, innerWidth, innerHeight);
-      ctx.lineWidth = 1.2;
-      ctx.strokeStyle = 'rgba(255,80,80,0.65)';
-      ctx.shadowColor = 'rgba(255,80,80,0.4)';
-      ctx.shadowBlur = 2;
-      var my = self.team;
-      var me = cam.matrixWorld.elements;
+      ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(255,80,80,0.65)';
+      ctx.shadowColor = 'rgba(255,80,80,0.4)'; ctx.shadowBlur = 2;
+      var my = self.team, me = cam.matrixWorld.elements;
       var cx = me[12], cy = me[13], cz = me[14];
       var pa = { x: 0, y: 0 }, pb = { x: 0, y: 0 };
       for (var i = 0; i < list.length; i++) {
@@ -924,7 +826,7 @@
         if (p.dead || !(p.hp > 0)) continue;
         var mm = p.obj.matrixWorld && p.obj.matrixWorld.elements; if (!mm) continue;
         var dx = mm[12] - cx, dy = mm[13] - cy, dz = mm[14] - cz;
-        var dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        var dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
         if (dist > BE.range) continue;
         var by = p.c.byName; if (!by) continue;
         for (var j = 0; j < BONE_PAIRS.length; j++) {
@@ -958,8 +860,7 @@
     var DM = { at: 0, mult: 1.3 };
     function dmgTick() {
       var g = G || game(); if (!g || !g.P) return;
-      var now = performance.now();
-      if (now < DM.at) return;
+      var now = performance.now(); if (now < DM.at) return;
       DM.at = now + 500;
       var w = null; try { w = g.P.W; } catch (e) { w = null; }
       if (!w || w.melee || w.c4 || w.grenade || w.dmg) return;
@@ -984,13 +885,11 @@
     /* WALLBANG */
     var WB = 200;
     function wbGun() {
-      try { var g = G || game(); var w = g && g.P && g.P.W; return !!(w && !w.melee && !w.grenade && !w.c4); }
-      catch (e) { return false; }
+      try { var g = G || game(); var w = g && g.P && g.P.W; return !!(w && !w.melee && !w.grenade && !w.c4); } catch (e) { return false; }
     }
     function wbPatch() {
       if (!FL.wallbang) return;
-      var g = G || game(); var L = g && g.bots;
-      if (!L || !L.length) return;
+      var g = G || game(); var L = g && g.bots; if (!L || !L.length) return;
       for (var i = 0; i < L.length; i++) {
         var b = L[i];
         if (!b || b.__wb || typeof b.hitTest !== 'function') continue;
@@ -1009,13 +908,16 @@
     function ammoTick() {
       if (!FL.infAmmo) return;
       var g = G || game(); if (!g || !g.P) return;
-      var now = performance.now();
-      if (now < AM.at) return;
+      var now = performance.now(); if (now < AM.at) return;
       AM.at = now + 200;
       var p = g.P, inv = null, w = null;
       try { inv = p.inv; } catch (e) {}
       if (inv) {
-        for (var k in inv) { var s = inv[k]; if (!s || typeof s !== 'object') continue; try { if (typeof s.reserve === 'number') s.reserve = 999; } catch (e) {} }
+        for (var k in inv) {
+          var s = inv[k]; if (!s || typeof s !== 'object') continue;
+          if (s.w && s.w.grenade) continue;
+          try { if (typeof s.reserve === 'number') s.reserve = 999; } catch (e) {}
+        }
       }
       try { if (typeof p.extReserve === 'number') p.extReserve = 99; } catch (e) {}
       try { w = p.W; } catch (e) { w = null; }
@@ -1054,16 +956,12 @@
     function gbTick() {
       requestAnimationFrame(gbTick);
       try {
-        if (!FL.godmode) {
-          if (GB.patched && GB.s && GB.origHT) { try { GB.s.hitTest = GB.origHT; } catch (e) {} GB.patched = 0; }
-          return;
-        }
+        if (!FL.godmode) { if (GB.patched && GB.s && GB.origHT) { try { GB.s.hitTest = GB.origHT; } catch (e) {} GB.patched = 0; } return; }
         var g = G || game(); if (!g || !g.P || !g.P.s) return;
         var s = g.P.s;
         if (s !== GB.s) gbBind(s);
         if (!GB.s || s.dead) return;
-        var now = performance.now();
-        if (now - GB.lastApply < 150) return;
+        var now = performance.now(); if (now - GB.lastApply < 150) return;
         GB.lastApply = now;
         if (GB.field) { try { s[GB.field] = 9e9; } catch (e) {} }
         else {
@@ -1095,10 +993,7 @@
       try { m.blocked = function () { return false; }; } catch (e) {}
       try { m.crosses = function () { return false; }; } catch (e) {}
       try { m.depenetrate = function () { return false; }; } catch (e) {}
-      try {
-        NC.mv = m.move;
-        m.move = function () { var r = NC.mv.apply(this, arguments); try { ncGuard(this); } catch (err) {} return r; };
-      } catch (e) {}
+      try { NC.mv = m.move; m.move = function () { var r = NC.mv.apply(this, arguments); try { ncGuard(this); } catch (err) {} return r; }; } catch (e) {}
     }
     function ncProbe(g, x, y, z) {
       try {
@@ -1171,8 +1066,7 @@
         var sendN = Pp.send, closeN = Pp.close;
         var rsGet = Object.getOwnPropertyDescriptor(Pp, 'readyState').get;
         function revive(rec, wait) {
-          if (!FL.antiKick) return;
-          if (rec.dead) return;
+          if (!FL.antiKick || rec.dead) return;
           clearTimeout(rec.timer);
           rec.timer = setTimeout(function () {
             if (!FL.antiKick || rec.dead) return;
@@ -1185,8 +1079,7 @@
             ns.onmessage = function (ev) { try { if (rec.onmessage) rec.onmessage.call(rec.sock, ev); } catch (e) {} };
             ns.onerror = function (ev) { try { if (rec.onerror) rec.onerror.call(rec.sock, ev); } catch (e) {} };
             ns.onclose = function (ev) {
-              var code = ev ? ev.code : 0;
-              rec.tries++;
+              var code = ev ? ev.code : 0; rec.tries++;
               if (rec.tries > 40 || code === 1008) { rec.dead = 1; return; }
               revive(rec, Math.min(8000, 200 * Math.pow(1.3, Math.min(rec.tries, 12))));
             };
@@ -1204,7 +1097,7 @@
                 set: function (fn) {
                   if (p === 'onmessage' && typeof fn === 'function') {
                     rec.onmessage = function (ev) { if (kgDrop(ev.data)) return; return fn.call(rec.sock, ev); };
-                  } else { rec[p] = fn; }
+                  } else rec[p] = fn;
                   try {
                     var d = Object.getOwnPropertyDescriptor(Pp, p);
                     if (rec.live && rsGet.call(rec.live) === 1) d.set.call(rec.live, rec[p]);
@@ -1216,14 +1109,7 @@
           });
           try { sock.send = function (d) { d = pbOut(d); try { if (rec.live && rsGet.call(rec.live) === 1) return sendN.call(rec.live, d); } catch (e) {} return sendN.call(sock, d); }; } catch (e) {}
           try { sock.close = function (c, r) { try { if (rec.live) closeN.call(rec.live, c, r); } catch (e) {} try { return closeN.call(sock, c, r); } catch (e) {} }; } catch (e) {}
-          try {
-            Object.defineProperty(sock, 'readyState', {
-              configurable: true, get: function () {
-                try { if (rec.live) return rsGet.call(rec.live); } catch (e) {}
-                try { return rsGet.call(sock); } catch (e) { return 3; }
-              }
-            });
-          } catch (e) {}
+          try { Object.defineProperty(sock, 'readyState', { configurable: true, get: function () { try { if (rec.live) return rsGet.call(rec.live); } catch (e) {} try { return rsGet.call(sock); } catch (e) { return 3; } } }); } catch (e) {}
           return sock;
         }
         function WSW(url, prot) {
@@ -1233,9 +1119,7 @@
         }
         WSW.prototype = Pp;
         try { WSW.CONNECTING = 0; WSW.OPEN = 1; WSW.CLOSING = 2; WSW.CLOSED = 3; } catch (e) {}
-        WSW.__pbKG = 1;
-        window.WebSocket = WSW;
-        KG.on = 1;
+        WSW.__pbKG = 1; window.WebSocket = WSW; KG.on = 1;
       } catch (e) {}
     })();
 
@@ -1246,12 +1130,10 @@
       try {
         if (!FL.antiKick) return;
         if (!KGW.n) return;
-        var b = null;
-        try { b = JSON.parse(sessionStorage.getItem('pbweb_battle') || 'null'); } catch (e) {}
+        var b = null; try { b = JSON.parse(sessionStorage.getItem('pbweb_battle') || 'null'); } catch (e) {}
         if (!b) return;
         var now = Date.now();
-        if (now - KGW.st < 10000) return;
-        if (now < KGW.next) return;
+        if (now - KGW.st < 10000 || now < KGW.next) return;
         if (document.visibilityState === 'hidden') return;
         KGW.next = now + 120000; KGW.rl++;
         if (KGW.rl <= 2) location.reload();
@@ -1262,24 +1144,22 @@
     var NA = { arr: null, at: 0, rf: 0, aim: 1, n: 0, tgt: null };
     function naSolve(from, to, v, g0, hi) {
       var dx = to.x - from.x, dz = to.z - from.z;
-      var x = Math.sqrt(dx * dx + dz * dz);
+      var x = Math.sqrt(dx*dx + dz*dz);
       if (!(x > 0.08)) return null;
-      var y = to.y - from.y, v2 = v * v;
-      var disc = v2 * v2 - g0 * (g0 * x * x + 2 * y * v2);
+      var y = to.y - from.y, v2 = v*v;
+      var disc = v2*v2 - g0*(g0*x*x + 2*y*v2);
       if (disc < 0) return null;
       var sq = Math.sqrt(disc);
-      var tan = (v2 + (hi ? sq : -sq)) / (g0 * x);
+      var tan = (v2 + (hi ? sq : -sq)) / (g0*x);
       if (!isFinite(tan)) return null;
-      var th = Math.atan(tan);
-      var hx = dx / x, hz = dz / x;
-      var vh = v * Math.cos(th);
-      return { vx: hx * vh, vy: v * Math.sin(th), vz: hz * vh, t: x / (vh || 0.001) };
+      var th = Math.atan(tan), hx = dx/x, hz = dz/x, vh = v*Math.cos(th);
+      return { vx: hx*vh, vy: v*Math.sin(th), vz: hz*vh, t: x/(vh || 0.001) };
     }
     function naTarget(g, off) {
       var s = g.P.s, list = g.bots || [], my = s.team;
       if (!s.mover || !s.mover.pos) return null;
       var yaw = +s.yaw || 0, cp = Math.cos(+s.pitch || 0);
-      var fx = -Math.sin(yaw) * cp, fz = -Math.cos(yaw) * cp;
+      var fx = -Math.sin(yaw)*cp, fz = -Math.cos(yaw)*cp;
       var best = null, bs = 1e9;
       for (var i = 0; i < list.length; i++) {
         var p = list[i];
@@ -1288,17 +1168,16 @@
         if (p.team === my || p.dead || !(p.hp > 0)) continue;
         var e = p.obj.matrixWorld && p.obj.matrixWorld.elements; if (!e) continue;
         var dx = e[12] - s.mover.pos.x, dz = e[14] - s.mover.pos.z;
-        var d = Math.sqrt(dx * dx + dz * dz);
+        var d = Math.sqrt(dx*dx + dz*dz);
         if (!(d > 1.2) || d > 220) continue;
-        var ang = Math.acos(clamp((dx * fx + dz * fz) / (d || 1), -1, 1));
-        var sc = d + ang * 16 - (ang < 0.55 ? 7 : 0);
+        var ang = Math.acos(clamp((dx*fx + dz*fz)/(d || 1), -1, 1));
+        var sc = d + ang*16 - (ang < 0.55 ? 7 : 0);
         if (sc < bs) { bs = sc; best = { x: e[12], y: e[13] + (off || 1.1), z: e[14], bot: p }; }
       }
       return best;
     }
     function naAim(g, n) {
-      if (!FL.nadeAim) return;
-      if (!n || !n.owner || n.owner !== g.P.s) return;
+      if (!FL.nadeAim || !n || !n.owner || n.owner !== g.P.s) return;
       NA.rf = performance.now() + 1000;
       if (!NA.aim) return;
       if (!n.vel || typeof n.vel.length !== 'function' || !n.pos) return;
@@ -1308,15 +1187,13 @@
       var off = kd === 'frag' ? 0.3 : kd === 'flash' ? 1.5 : 1.05;
       var to = naTarget(g, off); if (!to) return;
       var lx = to.x - n.pos.x, ly = to.y - n.pos.y, lz = to.z - n.pos.z;
-      var ld = Math.sqrt(lx * lx + ly * ly + lz * lz);
-      if (!(ld > 1.5)) return;
+      var ld = Math.sqrt(lx*lx + ly*ly + lz*lz); if (!(ld > 1.5)) return;
       try {
         if (typeof g.cast !== 'function') return;
         var eye = (g.camera && g.camera.position) || n.pos;
         var ex = to.x - eye.x, ey = to.y - eye.y, ez = to.z - eye.z;
-        var ed = Math.sqrt(ex * ex + ey * ey + ez * ez);
-        if (!(ed > 1.5)) return;
-        if (g.cast(eye, n.pos.clone().set(ex / ed, ey / ed, ez / ed), ed - 1.2)) return;
+        var ed = Math.sqrt(ex*ex + ey*ey + ez*ez); if (!(ed > 1.5)) return;
+        if (g.cast(eye, n.pos.clone().set(ex/ed, ey/ed, ez/ed), ed - 1.2)) return;
       } catch (e) { return; }
       var lo = naSolve(n.pos, to, v, 10, 0); if (!lo) return;
       try {
@@ -1333,25 +1210,17 @@
       if (NA.arr !== g.nades) {
         NA.arr = g.nades;
         var op = Array.prototype.push;
-        try {
-          g.nades.push = function () {
-            var r = op.apply(this, arguments);
-            for (var i = 0; i < arguments.length; i++) { try { naAim(g, arguments[i]); } catch (e) {} }
-            return r;
-          };
-        } catch (e) {}
+        try { g.nades.push = function () { var r = op.apply(this, arguments); for (var i = 0; i < arguments.length; i++) { try { naAim(g, arguments[i]); } catch (e) {} } return r; }; } catch (e) {}
       }
       return g;
     }
     function naAmmo(g) {
       if (!FL.nadeAim) return;
-      var now = performance.now();
-      if (now < NA.at) return;
+      var now = performance.now(); if (now < NA.at) return;
       NA.at = now + 150;
       if (NA.rf && now < NA.rf) return;
       NA.rf = 0;
-      var p = g.P, inv = null;
-      try { inv = p.inv; } catch (e) {}
+      var p = g.P, inv = null; try { inv = p.inv; } catch (e) {}
       if (!inv) return;
       for (var k in inv) {
         var s = inv[k];
@@ -1360,10 +1229,7 @@
         try { if (s.ammo !== m) s.ammo = m; } catch (e) {}
       }
     }
-    function naTick() {
-      requestAnimationFrame(naTick);
-      try { var g = naBind(); if (!g) return; naAmmo(g); } catch (e) {}
-    }
+    function naTick() { requestAnimationFrame(naTick); try { var g = naBind(); if (!g) return; naAmmo(g); } catch (e) {} }
     try { requestAnimationFrame(naTick); } catch (e) {}
 
     var NADE_API = {
@@ -1377,13 +1243,7 @@
     /* QUICK CHANGE */
     var QC = { on: 1, fast: 0, slot: 0, ammo: -1, gate: {}, invRef: null, n: 0, sw: 0, dead: 0 };
     function qcW(p, slot) { try { var s = p.inv[slot]; return s && s.w ? s.w : null; } catch (e) { return null; } }
-    function qcTap(code) {
-      try {
-        var o = { code: code, key: code, bubbles: true, cancelable: true };
-        window.dispatchEvent(new KeyboardEvent('keydown', o));
-        window.dispatchEvent(new KeyboardEvent('keyup', o));
-      } catch (e) {}
-    }
+    function qcTap(code) { try { var o = { code: code, key: code, bubbles: true, cancelable: true }; window.dispatchEvent(new KeyboardEvent('keydown', o)); window.dispatchEvent(new KeyboardEvent('keyup', o)); } catch (e) {} }
     function qcTick() {
       requestAnimationFrame(qcTick);
       try {
@@ -1395,12 +1255,7 @@
         if (QC.dead) { QC.dead = 0; QC.gate = {}; QC.slot = p.slot; QC.ammo = p.ammo; }
         if (p.slot === QC.slot && typeof p.ammo === 'number' && QC.ammo >= 0 && p.ammo < QC.ammo) { QC.gate[p.slot] = +p.nextShot || 0; QC.n++; }
         if (p.slot !== QC.slot) {
-          if (QC.on) {
-            p.swapEnd = 0;
-            p.nextShot = QC.fast ? 0 : (QC.gate[p.slot] || 0);
-            try { if (p.fpActs && p.fpActs.change) p.fpActs.change.timeScale = 8; } catch (e) {}
-            QC.sw++;
-          }
+          if (QC.on) { p.swapEnd = 0; p.nextShot = QC.fast ? 0 : (QC.gate[p.slot] || 0); try { if (p.fpActs && p.fpActs.change) p.fpActs.change.timeScale = 8; } catch (e) {} QC.sw++; }
           QC.slot = p.slot;
         }
         QC.ammo = p.ammo;
@@ -1413,10 +1268,7 @@
       on: function () { QC.on = 1; return 'on'; },
       off: function () { QC.on = 0; return 'off'; },
       swap: function () { qcTap('KeyQ'); return 'swap'; },
-      st: function () {
-        var g = G || game(), p = g && g.P, w = p && qcW(p, p.slot);
-        return { v: V, on: QC.on, slot: p && p.slot, w: w && w.name, shots: QC.n, swaps: QC.sw, fast: QC.fast };
-      }
+      st: function () { var g = G || game(), p = g && g.P, w = p && qcW(p, p.slot); return { v: V, on: QC.on, slot: p && p.slot, w: w && w.name, shots: QC.n, swaps: QC.sw, fast: QC.fast }; }
     };
     window.__pbqc = QC_API; HIDDEN.pbqc = QC_API;
 
@@ -1424,11 +1276,10 @@
     var PR = { on: 0, ms: 120 };
     function predictPos(bot, ms) {
       try {
-        var mv = bot && bot.mover;
-        if (!mv || !mv.vel) return null;
+        var mv = bot && bot.mover; if (!mv || !mv.vel) return null;
         var e = bot.obj && bot.obj.matrixWorld && bot.obj.matrixWorld.elements; if (!e) return null;
         var t = (ms || 120) / 1000;
-        return { x: e[12] + mv.vel.x * t, y: e[13] + mv.vel.y * t * 0.35, z: e[14] + mv.vel.z * t };
+        return { x: e[12] + mv.vel.x*t, y: e[13] + mv.vel.y*t*0.35, z: e[14] + mv.vel.z*t };
       } catch (err) { return null; }
     }
     var RF = { on: 0 };
@@ -1449,8 +1300,7 @@
     function frTick() {
       requestAnimationFrame(frTick);
       if (!FR.on) return;
-      var now = performance.now();
-      if (now < FR.at) return;
+      var now = performance.now(); if (now < FR.at) return;
       FR.at = now + 80;
       try {
         var g = G || game(); if (!g || !g.P) return;
@@ -1472,6 +1322,7 @@
       try {
         var g = G || game(); if (!g || !g.P) return;
         var p = g.P;
+        if (p.fpActs && p.fpActs.zoom) p.fpActs.zoom.timeScale = 20;
         if (p.fpActs && p.fpActs.scope) p.fpActs.scope.timeScale = 20;
         if (typeof p.scopeT === 'number' && p.scopeT > 0 && p.scopeT < 0.2) p.scopeT = 0.05;
       } catch (e) {}
@@ -1482,34 +1333,30 @@
     function tbTick() {
       requestAnimationFrame(tbTick);
       if (!TB.on) return;
-      var now = performance.now();
-      if (now < TB.at) return;
+      var now = performance.now(); if (now < TB.at) return;
       TB.at = now + 40;
       try {
         var g = G || game(); if (!g || !g.P || !g.P.s) return;
-        var p = g.P, s = p.s, w = null;
-        try { w = p.W; } catch (e) {}
-        if (!w || w.melee || w.grenade || w.c4) return;
-        if (s.dead) return;
+        var p = g.P, s = p.s, w = null; try { w = p.W; } catch (e) {}
+        if (!w || w.melee || w.grenade || w.c4 || s.dead) return;
         var cam = g.camera, m = cam.matrixWorld.elements;
         var Cx = m[12], Cy = m[13], Cz = m[14];
         var yaw = +s.yaw || 0, pitch = +s.pitch || 0;
         var cp = Math.cos(pitch);
-        var Fx = -Math.sin(yaw) * cp, Fy = Math.sin(pitch), Fz = -Math.cos(yaw) * cp;
+        var Fx = -Math.sin(yaw)*cp, Fy = Math.sin(pitch), Fz = -Math.cos(yaw)*cp;
         var orig = { x: Cx, y: Cy, z: Cz }, dir = { x: Fx, y: Fy, z: Fz };
         var list = g.bots || [];
         for (var i = 0; i < list.length; i++) {
           var b = list[i];
-          if (!b || b === s || b.dead || !(b.hp > 0)) continue;
-          if (b.team === s.team) continue;
+          if (!b || b === s || b.dead || !(b.hp > 0) || b.team === s.team) continue;
           if (typeof b.hitTest !== 'function') continue;
           var h = null; try { h = hitTestSafe(b, orig, dir, 200); } catch (e) { h = null; }
           if (!h || !h.head) continue;
           if (now < nextTap || holding) return;
           down(); holding = true;
-          var holdMs = 40 + Math.random() * 25;
+          var holdMs = 40 + Math.random()*25;
           setTimeout(function () { if (holding) up(); }, holdMs);
-          nextTap = now + holdMs + 80 + Math.random() * 60;
+          nextTap = now + holdMs + 80 + Math.random()*60;
           return;
         }
       } catch (e) {}
@@ -1533,9 +1380,8 @@
               var cam = g2.camera, me = cam.matrixWorld.elements;
               var ox = me[12], oy = me[13], oz = me[14];
               var dx = hp.x - ox, dy = hp.y - oy, dz = hp.z - oz;
-              var len = Math.sqrt(dx * dx + dy * dy + dz * dz);
-              if (len < 1) return f.call(this, o, d, m);
-              var nd = { x: dx / len, y: dy / len, z: dz / len };
+              var len = Math.sqrt(dx*dx + dy*dy + dz*dz); if (len < 1) return f.call(this, o, d, m);
+              var nd = { x: dx/len, y: dy/len, z: dz/len };
               var no = { x: ox, y: oy, z: oz };
               return f.call(this, no, nd, len + 1);
             } catch (e) { return f.call(this, o, d, m); }
@@ -1548,13 +1394,12 @@
     function irTick() {
       requestAnimationFrame(irTick);
       if (!IR.on) return;
-      var now = performance.now();
-      if (now < IR.at) return;
+      var now = performance.now(); if (now < IR.at) return;
       IR.at = now + 200;
       try {
         var g = G || game(); if (!g || !g.P || !g.P.s) return;
         var s = g.P.s;
-        if (s.dead) { s.dead = false; }
+        if (s.dead) s.dead = false;
       } catch (e) {}
     }
     try { requestAnimationFrame(irTick); } catch (e) {}
@@ -1566,15 +1411,13 @@
       var w = document.createElement('div');
       w.setAttribute('data-pb', '1');
       w.style.cssText = 'position:fixed;right:8px;bottom:8px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.7);border:1px solid rgba(0,180,80,.6);z-index:2147483000;pointer-events:none;display:none';
-      host.appendChild(w); RD.el = w; RD.dots = [];
-      return true;
+      host.appendChild(w); RD.el = w; RD.dots = []; return true;
     }
     function rdDraw(g) {
       if (!RD.on) { if (RD.el) RD.el.style.display = 'none'; return; }
       if (!rdInit()) return;
       RD.el.style.display = 'block';
-      var now = performance.now();
-      if (now - RD.last < 50) return;
+      var now = performance.now(); if (now - RD.last < 50) return;
       RD.last = now;
       var s = g.P && g.P.s; if (!s || !s.mover || !s.mover.pos) return;
       var sx = s.mover.pos.x, sz = s.mover.pos.z;
@@ -1582,22 +1425,15 @@
       var list = g.bots || [], idx = 0;
       for (var i = 0; i < list.length; i++) {
         var p = list[i];
-        if (!p || p === s || p.dead || !(p.hp > 0)) continue;
-        if (p.team === s.team) continue;
+        if (!p || p === s || p.dead || !(p.hp > 0) || p.team === s.team) continue;
         var e = p.obj && p.obj.matrixWorld && p.obj.matrixWorld.elements; if (!e) continue;
         var dx = e[12] - sx, dz = e[14] - sz;
-        var d = Math.sqrt(dx * dx + dz * dz);
-        if (d > range) continue;
+        var d = Math.sqrt(dx*dx + dz*dz); if (d > range) continue;
         var ca = Math.cos(-yaw), sa = Math.sin(-yaw);
-        var rx = dx * ca - dz * sa, rz = dx * sa + dz * ca;
-        var cx = 60 + (rx / range) * 55, cz = 60 + (rz / range) * 55;
+        var rx = dx*ca - dz*sa, rz = dx*sa + dz*ca;
+        var cx = 60 + (rx/range)*55, cz = 60 + (rz/range)*55;
         var dot = RD.dots[idx];
-        if (!dot) {
-          dot = document.createElement('div');
-          dot.style.cssText = 'position:absolute;width:5px;height:5px;margin:-2.5px 0 0 -2.5px;border-radius:50%;background:#ef4444';
-          RD.el.appendChild(dot);
-          RD.dots[idx] = dot;
-        }
+        if (!dot) { dot = document.createElement('div'); dot.style.cssText = 'position:absolute;width:5px;height:5px;margin:-2.5px 0 0 -2.5px;border-radius:50%;background:#ef4444'; RD.el.appendChild(dot); RD.dots[idx] = dot; }
         dot.style.display = 'block';
         dot.style.left = cx.toFixed(1) + 'px';
         dot.style.top = cz.toFixed(1) + 'px';
@@ -1626,16 +1462,13 @@
           var list = g.bots || [], self = g.P && g.P.s, idx = 0;
           for (var i = 0; i < list.length; i++) {
             var p = list[i];
-            if (!p || p === self || p.dead || !(p.hp > 0)) continue;
-            if (p.team === self.team) continue;
-            var s = E.slots[idx++];
-            if (!s || !s.tx2) continue;
+            if (!p || p === self || p.dead || !(p.hp > 0) || p.team === self.team) continue;
+            var s = E.slots[idx++]; if (!s || !s.tx2) continue;
             s.tx2.textContent = Math.round(p.hp) + ' HP';
             s.tx2.style.display = 'block';
           }
           for (; idx < E.slots.length; idx++) {
-            var s2 = E.slots[idx];
-            if (s2 && s2.tx2) s2.tx2.style.display = 'none';
+            var s2 = E.slots[idx]; if (s2 && s2.tx2) s2.tx2.style.display = 'none';
           }
         } catch (e) {}
       };
@@ -1648,8 +1481,7 @@
       var w = document.createElement('div');
       w.setAttribute('data-pb', '1');
       w.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);border:1.5px dashed rgba(0,180,80,.85);border-radius:50%;z-index:2147482999;pointer-events:none;display:none';
-      host.appendChild(w); FC.el = w;
-      return true;
+      host.appendChild(w); FC.el = w; return true;
     }
     function fcTick() {
       requestAnimationFrame(fcTick);
@@ -1657,8 +1489,8 @@
       if (!fcInit()) return;
       FC.el.style.display = 'block';
       var r = P.povCircleR;
-      FC.el.style.width = (r * 2).toFixed(0) + 'px';
-      FC.el.style.height = (r * 2).toFixed(0) + 'px';
+      FC.el.style.width = (r*2).toFixed(0) + 'px';
+      FC.el.style.height = (r*2).toFixed(0) + 'px';
     }
     try { requestAnimationFrame(fcTick); } catch (e) {}
 
@@ -1680,15 +1512,13 @@
       var w = document.createElement('div');
       w.setAttribute('data-pb', '1');
       w.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;overflow:hidden;pointer-events:none;z-index:2147482999';
-      host.appendChild(w); TR.wrap = w; TR.slots = [];
-      return true;
+      host.appendChild(w); TR.wrap = w; TR.slots = []; return true;
     }
     function trSlot(i) {
       var s = TR.slots[i]; if (s) return s;
       var line = document.createElement('div');
       line.style.cssText = 'position:absolute;left:0;top:0;height:1.5px;background:linear-gradient(90deg,rgba(16,185,129,.95),rgba(16,185,129,.35));transform-origin:0 50%;display:none;box-shadow:0 0 4px rgba(16,185,129,.6);border-radius:1px';
-      TR.wrap.appendChild(line); s = { line: line }; TR.slots[i] = s;
-      return s;
+      TR.wrap.appendChild(line); s = { line: line }; TR.slots[i] = s; return s;
     }
     function trClear() { for (var i = 0; i < TR.slots.length; i++) TR.slots[i].line.style.display = 'none'; }
     function trHost() {
@@ -1697,7 +1527,8 @@
       TR.hostAt = now;
       var best = null, ba = 0, cs = document.getElementsByTagName('canvas');
       for (var i = 0; i < cs.length; i++) {
-        var c = cs[i]; if (c.getAttribute('data-pb')) continue;
+        var c = cs[i];
+        if (c.getAttribute('data-pb') || c.id === 'crossCv') continue;
         var r = c.getBoundingClientRect(), a = r.width * r.height;
         if (a > ba) { ba = a; best = c; }
       }
@@ -1708,7 +1539,7 @@
       if (!_trV) { try { _trV = cam.position.clone(); } catch (e) { return null; } }
       var d = _trV.set(x, y, z).project(cam);
       if (!(d.z > -1 && d.z < 1)) return null;
-      return { x: r.left + (d.x * 0.5 + 0.5) * r.width, y: r.top + (-d.y * 0.5 + 0.5) * r.height };
+      return { x: r.left + (d.x*0.5 + 0.5)*r.width, y: r.top + (-d.y*0.5 + 0.5)*r.height };
     }
     function trDraw(g) {
       if (!TR.on) { if (TR.wrap) trClear(); return; }
@@ -1716,25 +1547,20 @@
       if (!list || !cam || !self || self.dead) { trClear(); return; }
       if (!trInit()) return;
       var host = trHost(); if (!host) { trClear(); return; }
-      var r = host.getBoundingClientRect();
-      if (!(r.width > 0)) { trClear(); return; }
-      var ox = r.left + r.width / 2;
-      var oy = r.top;
+      var r = host.getBoundingClientRect(); if (!(r.width > 0)) { trClear(); return; }
+      var ox = r.left + r.width/2, oy = r.top;
       var my = self.team, idx = 0;
       for (var i = 0; i < list.length; i++) {
         var p = list[i];
         if (!p || !p.obj || !p.c || p === self) continue;
-        if (p.team === my) continue;
-        if (p.dead || !(p.hp > 0)) continue;
+        if (p.team === my || p.dead || !(p.hp > 0)) continue;
         var hp = headPoint(p); if (!hp) continue;
-        var t = trProj(cam, r, hp.x, hp.y, hp.z);
-        if (!t) continue;
+        var t = trProj(cam, r, hp.x, hp.y, hp.z); if (!t) continue;
         if (t.x < r.left - 40 || t.x > r.left + r.width + 40) continue;
         if (t.y < r.top - 40 || t.y > r.top + r.height + 40) continue;
-        var dx = t.x - ox, dy = t.y - oy;
-        var len = Math.sqrt(dx * dx + dy * dy);
+        var dx = t.x - ox, dy = t.y - oy, len = Math.sqrt(dx*dx + dy*dy);
         if (len < 20) continue;
-        var ang = Math.atan2(dy, dx) * 180 / Math.PI;
+        var ang = Math.atan2(dy, dx)*180/Math.PI;
         var s = trSlot(idx++);
         s.line.style.display = 'block';
         s.line.style.left = ox.toFixed(1) + 'px';
@@ -1781,21 +1607,13 @@
 
     (function pbxFrame() {
       requestAnimationFrame(pbxFrame);
-      try {
-        var g = G || game(); if (!g) return;
-        if (SA.on) saPatch();
-        if (RD.on) rdDraw(g);
-        if (TR.on) trDraw(g);
-      } catch (e) {}
+      try { var g = G || game(); if (!g) return; if (SA.on) saPatch(); if (RD.on) rdDraw(g); if (TR.on) trDraw(g); } catch (e) {}
     })();
 
     (function hideAPIs() {
       try {
         ['__pb', '__pbvis', '__pbnade', '__pbqc', '__pbx'].forEach(function (k) {
-          try {
-            var v = window[k]; if (!v) return;
-            Object.defineProperty(window, k, { configurable: false, enumerable: false, get: function () { return v; } });
-          } catch (e) {}
+          try { var v = window[k]; if (!v) return; Object.defineProperty(window, k, { configurable: false, enumerable: false, get: function () { return v; } }); } catch (e) {}
         });
       } catch (e) {}
     })();
@@ -1803,9 +1621,7 @@
     log(BRAND, V, 'up');
     requestAnimationFrame(tick);
 
-    var __gCheck = setInterval(function () {
-      if (window.G) { log('window.G exposed ✓'); clearInterval(__gCheck); }
-    }, 1000);
+    var __gCheck = setInterval(function () { if (window.G) { log('window.G exposed ✓'); clearInterval(__gCheck); } }, 1000);
     setTimeout(function () { if (!window.G) log('window.G still missing — gate patch may have failed'); }, 15000);
 
     /* ============================================================
@@ -1819,103 +1635,69 @@
         try {
           if (document.querySelector('link[data-fa]')) return;
           var l = document.createElement('link');
-          l.rel = 'stylesheet';
-          l.setAttribute('data-fa', '1');
+          l.rel = 'stylesheet'; l.setAttribute('data-fa', '1');
           l.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css';
           (document.head || document.documentElement).appendChild(l);
         } catch (e) {}
       })();
 
       var css = [
-        '.fk{position:fixed;top:8px;right:8px;z-index:2147483600;font:12px/1.3 system-ui,Tahoma,sans-serif;color:#1f2937;',
-        '  background:#fff;border:1px solid #e8ecf0;border-radius:10px;',
-        '  box-shadow:0 3px 14px rgba(0,0,0,.08);pointer-events:auto;user-select:none;overflow:hidden;transition:width .15s,height .15s}',
-        '.fk.hide{display:none}',
-        '.fk.expanded{display:flex;flex-direction:row}',
-        '.fk.expanded .fk-rail{display:flex;flex-direction:column;background:#fafbfc;border-right:1px solid #eef1f4;',
-        '  width:46px;padding:5px 0;gap:2px;flex:0 0 46px;order:0}',
+        '.fk{position:fixed;top:8px;right:8px;z-index:2147483600;font:12px/1.3 system-ui,Tahoma,sans-serif;color:#1f2937;background:#fff;border:1px solid #e8ecf0;border-radius:10px;box-shadow:0 3px 14px rgba(0,0,0,.08);pointer-events:auto;user-select:none;overflow:hidden;transition:width .15s,height .15s}',
+        '.fk.hide{display:none}.fk.expanded{display:flex;flex-direction:row}',
+        '.fk.expanded .fk-rail{display:flex;flex-direction:column;background:#fafbfc;border-right:1px solid #eef1f4;width:46px;padding:5px 0;gap:2px;flex:0 0 46px;order:0}',
         '.fk.expanded .fk-body-col{order:1;width:290px;display:flex;flex-direction:column;min-width:0}',
-        '.fk.expanded .fk-tabbar{display:none}',
-        '.fk.collapsed{width:auto}',
-        '.fk.collapsed .fk-rail{display:none}',
-        '.fk.collapsed .fk-body-col{display:none}',
+        '.fk.expanded .fk-tabbar{display:none}.fk.collapsed{width:auto}',
+        '.fk.collapsed .fk-rail{display:none}.fk.collapsed .fk-body-col{display:none}',
         '.fk.collapsed .fk-tabbar{display:flex;align-items:center;gap:6px;padding:5px 9px;background:#fafbfc;border-radius:10px}',
         '.fk.collapsed .fk-tb-title{font:800 11px/1 system-ui,Tahoma,sans-serif;color:#0f172a;letter-spacing:.5px;white-space:nowrap}',
         '.fk.collapsed .fk-tb-title .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#7c3aed;margin-right:5px;vertical-align:middle}',
-        '.fk-tabbar .fk-tb-open{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;',
-        '  justify-content:center;font-size:12px;color:#fff;cursor:pointer;background:#7c3aed;font-weight:900;flex:0 0 22px;line-height:1}',
+        '.fk-tabbar .fk-tb-open{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;cursor:pointer;background:#7c3aed;font-weight:900;flex:0 0 22px;line-height:1}',
         '.fk-tabbar .fk-tb-open:hover{background:#6d28d9}',
-        '.fk-rail .fk-rail-btn{width:42px;height:42px;margin:0 auto;border-radius:6px;display:flex;flex-direction:column;',
-        '  align-items:center;justify-content:center;gap:1px;color:#8892a0;cursor:pointer;transition:all .12s}',
-        '.fk-rail .fk-rail-btn i{font-size:12px;line-height:1}',
-        '.fk-rail .fk-rail-btn span{font-size:7px;font-weight:800;letter-spacing:.2px;line-height:1}',
-        '.fk-rail .fk-rail-btn:hover{background:#f0f2f5;color:#7c3aed}',
-        '.fk-rail .fk-rail-btn.on{background:#7c3aed;color:#fff}',
-        '.fk-h{display:flex;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid #eef1f4;',
-        '  background:#fafbfc;font-weight:700;cursor:move}',
+        '.fk-rail .fk-rail-btn{width:42px;height:42px;margin:0 auto;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;color:#8892a0;cursor:pointer;transition:all .12s}',
+        '.fk-rail .fk-rail-btn i{font-size:12px;line-height:1}.fk-rail .fk-rail-btn span{font-size:7px;font-weight:800;letter-spacing:.2px;line-height:1}',
+        '.fk-rail .fk-rail-btn:hover{background:#f0f2f5;color:#7c3aed}.fk-rail .fk-rail-btn.on{background:#7c3aed;color:#fff}',
+        '.fk-h{display:flex;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid #eef1f4;background:#fafbfc;font-weight:700;cursor:move}',
         '.fk-h .dot{width:7px;height:7px;border-radius:50%;background:#7c3aed;flex:0 0 7px}',
         '.fk-h .title{font-size:12px;color:#0f172a;letter-spacing:.4px}',
         '.fk-h .v{opacity:.7;font-weight:400;font-size:9px;margin-left:auto;color:#8892a0}',
-        '.fk-toggle{cursor:pointer;margin-left:4px;color:#fff;border-radius:4px;',
-        '  width:20px;height:20px;display:flex;align-items:center;justify-content:center;flex:0 0 20px;font-size:10px;background:#7c3aed}',
-        '.fk-toggle:hover{background:#6d28d9}',
-        '.fk-body{padding:6px 9px 9px;max-height:60vh;overflow:auto;background:#fff}',
-        '.fk-body::-webkit-scrollbar{width:3px}',
-        '.fk-body::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:2px}',
-        '.fk-page{display:none}',
-        '.fk-page.on{display:block}',
+        '.fk-toggle{cursor:pointer;margin-left:4px;color:#fff;border-radius:4px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;flex:0 0 20px;font-size:10px;background:#7c3aed}',
+        '.fk-toggle:hover{background:#6d28d9}.fk-body{padding:6px 9px 9px;max-height:60vh;overflow:auto;background:#fff}',
+        '.fk-body::-webkit-scrollbar{width:3px}.fk-body::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:2px}',
+        '.fk-page{display:none}.fk-page.on{display:block}',
         '.fk-sec{margin:8px 0 4px;font-size:9px;letter-spacing:1px;color:#7c3aed;text-transform:uppercase;opacity:.9;font-weight:800;display:flex;align-items:center;gap:4px}',
-        '.fk-sec:first-child{margin-top:0}',
-        '.fk-sec i{font-size:10px}',
+        '.fk-sec:first-child{margin-top:0}.fk-sec i{font-size:10px}',
         '.fk-row{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:3px 0}',
         '.fk-row label{flex:1;color:#334155;font-size:11px;line-height:1.25}',
         '.fk-row small{display:block;color:#a0aab5;font-size:9px;line-height:1.15;margin-top:1px}',
-        '.fk-row .risk-badge{display:inline-block;padding:0 3px;margin-left:3px;border-radius:2px;font-size:7px;',
-        '  background:#f59e0b;color:#fff;font-weight:900;vertical-align:middle;letter-spacing:.2px;line-height:9px}',
+        '.fk-row .risk-badge{display:inline-block;padding:0 3px;margin-left:3px;border-radius:2px;font-size:7px;background:#f59e0b;color:#fff;font-weight:900;vertical-align:middle;letter-spacing:.2px;line-height:9px}',
         '.fk-sw{position:relative;width:32px;height:17px;flex:0 0 32px;border-radius:9px;background:#d4dae1;transition:background .15s;cursor:pointer}',
         '.fk-sw::after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.15);transition:transform .15s}',
-        '.fk-sw.on{background:#7c3aed}',
-        '.fk-sw.on::after{transform:translateX(15px)}',
+        '.fk-sw.on{background:#7c3aed}.fk-sw.on::after{transform:translateX(15px)}',
         '.fk-slider{display:flex;align-items:center;gap:6px;padding:2px 0}',
         '.fk-slider label{flex:0 0 80px;font-size:10px;color:#334155}',
         '.fk-slider input[type=range]{flex:1;height:2px;-webkit-appearance:none;background:#d4dae1;border-radius:2px;outline:none}',
         '.fk-slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:#7c3aed;cursor:pointer}',
         '.fk-slider .n{flex:0 0 42px;text-align:right;font-size:9px;color:#7c3aed;font-variant-numeric:tabular-nums;font-weight:700}',
         '.fk-select{width:100%;box-sizing:border-box;padding:4px 7px;border:1px solid #cbd5e1;border-radius:5px;font:11px system-ui,sans-serif;outline:none;background:#fff;color:#334155;cursor:pointer;margin-top:2px}',
-        '.fk-select:focus{border-color:#7c3aed}',
-        '.fk-btns{display:flex;gap:5px;margin-top:5px}',
-        '.fk-btn{flex:1;padding:5px 0;text-align:center;border-radius:5px;background:#f1f5f9;border:1px solid #d4dae1;',
-        '  color:#334155;cursor:pointer;font-size:10px;transition:background .15s;display:flex;align-items:center;justify-content:center;gap:4px}',
-        '.fk-btn:hover{background:#e2e8f0}',
-        '.fk-btn:active{background:#7c3aed;color:#fff}',
+        '.fk-select:focus{border-color:#7c3aed}.fk-btns{display:flex;gap:5px;margin-top:5px}',
+        '.fk-btn{flex:1;padding:5px 0;text-align:center;border-radius:5px;background:#f1f5f9;border:1px solid #d4dae1;color:#334155;cursor:pointer;font-size:10px;transition:background .15s;display:flex;align-items:center;justify-content:center;gap:4px}',
+        '.fk-btn:hover{background:#e2e8f0}.fk-btn:active{background:#7c3aed;color:#fff}',
         '.fk-btn.on{background:#7c3aed;border-color:#7c3aed;color:#fff}',
-        '.fk-btn.danger{border-color:#fca5a5;background:#fef2f2;color:#b91c1c}',
-        '.fk-btn.danger:hover{background:#fee2e2}',
+        '.fk-btn.danger{border-color:#fca5a5;background:#fef2f2;color:#b91c1c}.fk-btn.danger:hover{background:#fee2e2}',
         '.fk-foot{margin-top:6px;padding-top:5px;border-top:1px solid #eef1f4;font-size:9px;color:#8892a0;font-variant-numeric:tabular-nums}',
-        '.fk-warn{margin-top:5px;padding:4px 6px;border-radius:5px;background:#fffbeb;border:1px solid #fcd34d;',
-        '  color:#92400e;font-size:9px;line-height:1.25}',
+        '.fk-warn{margin-top:5px;padding:4px 6px;border-radius:5px;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;font-size:9px;line-height:1.25}',
         '.fk-hint{font-size:9px;color:#a0aab5;line-height:1.25;padding:2px 0 3px}'
       ].join('');
 
       var style = document.createElement('style');
-      style.setAttribute('data-pb', '1');
-      style.textContent = css;
+      style.setAttribute('data-pb', '1'); style.textContent = css;
       (document.head || document.documentElement).appendChild(style);
 
-      function el(tag, cls, txt) {
-        var e = document.createElement(tag);
-        if (cls) e.className = cls;
-        if (txt != null) e.textContent = txt;
-        return e;
-      }
+      function el(tag, cls, txt) { var e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
       function toggle(initial, onChange) {
         var sw = el('div', 'fk-sw' + (initial ? ' on' : ''));
         var state = !!initial;
-        sw.addEventListener('click', function () {
-          state = !state; sw.classList.toggle('on', state);
-          try { onChange(state); } catch (e) {}
-          refreshFoot();
-        });
+        sw.addEventListener('click', function () { state = !state; sw.classList.toggle('on', state); try { onChange(state); } catch (e) {} refreshFoot(); });
         return { node: sw, get: function () { return state; }, set: function (v) { state = !!v; sw.classList.toggle('on', state); } };
       }
       function slider(min, max, step, val, fmt, onChange) {
@@ -1925,37 +1707,23 @@
         inp.type = 'range'; inp.min = min; inp.max = max; inp.step = step; inp.value = val;
         var num = el('div', 'n', fmt(val));
         wrap.appendChild(lb); wrap.appendChild(inp); wrap.appendChild(num);
-        inp.addEventListener('input', function () {
-          var v = parseFloat(inp.value);
-          num.textContent = fmt(v);
-          try { onChange(v); } catch (e) {}
-        });
+        inp.addEventListener('input', function () { var v = parseFloat(inp.value); num.textContent = fmt(v); try { onChange(v); } catch (e) {} });
         return { node: wrap, label: lb, input: inp, set: function (v) { inp.value = v; num.textContent = fmt(v); } };
       }
       function row(label, node, smallTxt) {
-        var r = el('div', 'fk-row');
-        var lb = el('label', null, label);
+        var r = el('div', 'fk-row'); var lb = el('label', null, label);
         if (smallTxt) lb.appendChild(el('small', null, smallTxt));
-        r.appendChild(lb); r.appendChild(node);
-        return r;
+        r.appendChild(lb); r.appendChild(node); return r;
       }
       function rowRisk(label, node, smallTxt) {
-        var r = el('div', 'fk-row');
-        var lb = el('label', null, label);
+        var r = el('div', 'fk-row'); var lb = el('label', null, label);
         lb.appendChild(el('span', 'risk-badge', 'RISK'));
         if (smallTxt) lb.appendChild(el('small', null, smallTxt));
-        r.appendChild(lb); r.appendChild(node);
-        return r;
+        r.appendChild(lb); r.appendChild(node); return r;
       }
-      function sec(icon, text) {
-        var s = el('div', 'fk-sec');
-        s.innerHTML = '<i class="fa-solid ' + icon + '"></i> ' + text;
-        return s;
-      }
+      function sec(icon, text) { var s = el('div', 'fk-sec'); s.innerHTML = '<i class="fa-solid ' + icon + '"></i> ' + text; return s; }
 
-      var panel = el('div', 'fk expanded');
-      panel.setAttribute('data-pb', '1');
-
+      var panel = el('div', 'fk expanded'); panel.setAttribute('data-pb', '1');
       var rail = el('div', 'fk-rail');
       var bodyCol = el('div', 'fk-body-col');
       var head = el('div', 'fk-h');
@@ -1963,31 +1731,21 @@
       head.appendChild(el('div', 'title', 'iRiLLL MODZ'));
       head.appendChild(el('div', 'v', 'V' + V));
       var toggleBtn = el('div', 'fk-toggle');
-      toggleBtn.innerHTML = '<i class="fa-solid fa-minus"></i>';
-      toggleBtn.title = 'Minimize';
+      toggleBtn.innerHTML = '<i class="fa-solid fa-minus"></i>'; toggleBtn.title = 'Minimize';
       head.appendChild(toggleBtn);
-      var body = el('div', 'fk-body');
-      bodyCol.appendChild(head);
-      bodyCol.appendChild(body);
-
+      var body = el('div', 'fk-body'); bodyCol.appendChild(head); bodyCol.appendChild(body);
       var tabbar = el('div', 'fk-tabbar');
-      var tbTitle = el('div', 'fk-tb-title');
-      tbTitle.innerHTML = '<span class="dot"></span>iRiLLL MODZ';
-      tabbar.appendChild(tbTitle);
-      var tbOpen = el('div', 'fk-tb-open', '+');
-      tbOpen.title = 'Buka menu';
+      var tbTitle = el('div', 'fk-tb-title'); tbTitle.innerHTML = '<span class="dot"></span>iRiLLL MODZ'; tabbar.appendChild(tbTitle);
+      var tbOpen = el('div', 'fk-tb-open', '+'); tbOpen.title = 'Buka menu';
       tbOpen.addEventListener('click', function (e) { e.stopPropagation(); setCollapsed(false); });
       tbOpen.addEventListener('mousedown', function (e) { e.stopPropagation(); });
       tbOpen.addEventListener('touchstart', function (e) { e.stopPropagation(); }, { passive: true });
       tabbar.appendChild(tbOpen);
-
-      panel.appendChild(rail);
-      panel.appendChild(bodyCol);
-      panel.appendChild(tabbar);
+      panel.appendChild(rail); panel.appendChild(bodyCol); panel.appendChild(tabbar);
 
       var TAB_META = {
         aim:    { icon: 'fa-crosshairs',  label: 'AIM',    title: 'Aim Lock (legacy)' },
-        aimbot: { icon: 'fa-bullseye',    label: 'AIMBOT', title: 'Aimbot (snap saat fire, POV circle)' },
+        aimbot: { icon: 'fa-bullseye',    label: 'AIMBOT', title: 'Aimbot (snap saat fire)' },
         vis:    { icon: 'fa-eye',         label: 'ESP',    title: 'Visual ESP' },
         gacor:  { icon: 'fa-bolt',        label: 'GACOR',  title: 'Advanced' },
         misc:   { icon: 'fa-sliders',     label: 'MISC',   title: 'Misc' },
@@ -2005,75 +1763,52 @@
 
       var TAB_KEY = 'ir_ui_tab';
       var tabsRail = {}, pages = {}, order = [];
-
       function addTab(key, label) {
         var meta = TAB_META[key] || { icon: 'fa-circle', label: label, title: label };
         var tR = el('div', 'fk-rail-btn');
         tR.innerHTML = '<i class="fa-solid ' + meta.icon + '"></i><span>' + meta.label + '</span>';
         tR.title = meta.title;
         tR.addEventListener('click', function () { selectTab(key); });
-        rail.appendChild(tR);
-        tabsRail[key] = tR;
-
-        var p = el('div', 'fk-page');
-        body.appendChild(p);
-        pages[key] = p;
-        order.push(key);
-        return p;
+        rail.appendChild(tR); tabsRail[key] = tR;
+        var p = el('div', 'fk-page'); body.appendChild(p); pages[key] = p; order.push(key); return p;
       }
       function selectTab(key) {
-        order.forEach(function (k) {
-          tabsRail[k].classList.toggle('on', k === key);
-          pages[k].classList.toggle('on', k === key);
-        });
+        order.forEach(function (k) { tabsRail[k].classList.toggle('on', k === key); pages[k].classList.toggle('on', k === key); });
         try { localStorage.setItem(TAB_KEY, key); } catch (e) {}
       }
 
-      /* AIM */
       var pAim = addTab('aim', 'AIM');
       pAim.appendChild(sec('fa-crosshairs', 'Mode Aim Lock'));
-      pAim.appendChild(el('div', 'fk-hint', 'Aim lock legacy: lock musuh di mana saja. Pakai Direct State Write (anti isTrusted).'));
-
+      pAim.appendChild(el('div', 'fk-hint', 'Aim lock legacy: lock musuh di mana saja. Direct state write.'));
       pAim.appendChild(sec('fa-bullseye', 'Titik Tembak'));
       var hitboxSelect = el('select', 'fk-select');
-      hitboxSelect.innerHTML = '<option value="head">Head — kepala</option><option value="body">Body — badan</option><option value="nearest">Nearest — dekat crosshair</option>';
+      hitboxSelect.innerHTML = '<option value="head">Head</option><option value="body">Body</option><option value="nearest">Nearest</option>';
       hitboxSelect.value = P.hitbox;
       hitboxSelect.addEventListener('change', function () { window.__pb.hitbox(this.value); });
       pAim.appendChild(hitboxSelect);
-
       pAim.appendChild(sec('fa-lock', 'Aim Lock'));
       var aimT = toggle(!!(window.__pb && window.__pb.state().aim), function (on) { if (on) window.__pb.on(); else window.__pb.off(); });
       pAim.appendChild(row('Aim lock', aimT.node, 'Auto-lock (legacy)'));
       var autoFireT = toggle(!!P.autoFire, function (on) { P.autoFire = on ? 1 : 0; });
-      pAim.appendChild(row('Auto fire', autoFireT.node, 'Tembak otomatis saat lock'));
+      pAim.appendChild(row('Auto fire', autoFireT.node, 'Tembak saat lock'));
       var invertT = toggle(!!O.invert, function (on) { O.invert = on; });
-      pAim.appendChild(row('Invert Y', invertT.node, 'Balik arah vertikal'));
+      pAim.appendChild(row('Invert Y', invertT.node, 'Balik vertikal'));
 
-      /* AIMBOT */
       var pAb = addTab('aimbot', 'AIMBOT');
       pAb.appendChild(sec('fa-bullseye', 'Aimbot (snap saat fire)'));
-      pAb.appendChild(el('div', 'fk-hint', 'Kamera tidak lock sebelum tembak. Snap saat fire. Hanya musuh di dalam POV circle.'));
+      pAb.appendChild(el('div', 'fk-hint', 'Kamera tidak lock sebelum tembak. Hanya musuh di dalam POV circle.'));
       var aimbotT = toggle(!!P.aimbotOn, function (on) { window.__pb.aimbot(on); });
       pAb.appendChild(rowRisk('Enable aimbot', aimbotT.node, 'Snap saat fire'));
-      var abGainS = slider(0.5, 3.0, 0.05, P.aimbotGain,
-        function (v) { return 'x' + v.toFixed(2); },
-        function (v) { window.__pb.aimbotGain(v); });
+      var abGainS = slider(0.5, 3.0, 0.05, P.aimbotGain, function (v) { return 'x' + v.toFixed(2); }, function (v) { window.__pb.aimbotGain(v); });
       abGainS.label.textContent = 'Snap speed'; pAb.appendChild(abGainS.node);
-      var abHoldS = slider(50, 800, 10, P.aimbotHoldMs,
-        function (v) { return v.toFixed(0) + 'ms'; },
-        function (v) { window.__pb.aimbotHold(v); });
+      var abHoldS = slider(50, 800, 10, P.aimbotHoldMs, function (v) { return v.toFixed(0) + 'ms'; }, function (v) { window.__pb.aimbotHold(v); });
       abHoldS.label.textContent = 'Lock duration'; pAb.appendChild(abHoldS.node);
-
       pAb.appendChild(sec('fa-circle-notch', 'POV Circle'));
       var fcT = toggle(!!FC.on, function (on) { window.__pbx.fovc(on); });
       pAb.appendChild(row('Show circle', fcT.node, 'Ring visual'));
-      var povCircleS = slider(1, 1500, 1, P.povCircleR,
-        function (v) { return v.toFixed(0) + 'px'; },
-        function (v) { window.__pb.povCircle(v); });
-      povCircleS.label.textContent = 'Circle size';
-      pAb.appendChild(povCircleS.node);
+      var povCircleS = slider(1, 1500, 1, P.povCircleR, function (v) { return v.toFixed(0) + 'px'; }, function (v) { window.__pb.povCircle(v); });
+      povCircleS.label.textContent = 'Circle size'; pAb.appendChild(povCircleS.node);
 
-      /* ESP */
       var pVis = addTab('vis', 'ESP');
       pVis.appendChild(sec('fa-layer-group', 'Overlay'));
       var espT = toggle(!!(window.__pbvis && window.__pbvis.is()), function (on) { if (on) window.__pbvis.on(); else window.__pbvis.off(); });
@@ -2088,12 +1823,10 @@
       pVis.appendChild(row('Radar mini', rdT.node, 'Minimap'));
       var trT = toggle(!!TR.on, function (on) { window.__pbx.tracer(on); });
       pVis.appendChild(row('ESP tracer', trT.node, 'Garis ke musuh'));
-
       pVis.appendChild(sec('fa-heart-pulse', 'Damage'));
       var dmgS = slider(1.0, 3.0, 0.05, 1.3, function (v) { return 'x' + v.toFixed(2); }, function (v) { if (window.__pbvis) window.__pbvis.dmg(v); });
       dmgS.label.textContent = 'Damage'; pVis.appendChild(dmgS.node);
 
-      /* GACOR */
       var pGac = addTab('gacor', 'GACOR');
       pGac.appendChild(sec('fa-bullseye', 'Aim Enhancement'));
       var predT = toggle(!!PR.on, function (on) { window.__pbx.pred(on, PR.ms); });
@@ -2104,17 +1837,15 @@
       pGac.appendChild(rowRisk('Silent aim', saT.node, 'Peluru ke kepala'));
       var tbT = toggle(!!TB.on, function (on) { window.__pbx.trig(on); });
       pGac.appendChild(rowRisk('Auto trigger', tbT.node, 'Tembak di musuh'));
-
       pGac.appendChild(sec('fa-gun', 'Shooting'));
       var sfT = toggle(!!SF.on, function (on) { window.__pbx.smoothFire(on); });
-      pGac.appendChild(row('Smooth fire', sfT.node, 'Anti-macet (rekomendasi ON)'));
+      pGac.appendChild(row('Smooth fire', sfT.node, 'Anti-macet'));
       var rapidT = toggle(!!RF.on, function (on) { window.__pbx.rapid(on); });
       pGac.appendChild(rowRisk('Rapid fire', rapidT.node, 'Hilangkan jeda'));
       var frT = toggle(!!FR.on, function (on) { window.__pbx.fastReload(on); });
       pGac.appendChild(rowRisk('Fast reload', frT.node, 'Reload instan'));
       var isT2 = toggle(!!IS.on, function (on) { window.__pbx.instScope(on); });
       pGac.appendChild(rowRisk('Instant scope', isT2.node, 'Scope cepat'));
-
       pGac.appendChild(sec('fa-shield-halved', 'Combat'));
       var wallT = toggle(!!FL.wallbang, function (on) { window.__pbx.wallbang(on); });
       pGac.appendChild(rowRisk('Wallbang', wallT.node, 'Tembus dinding'));
@@ -2123,48 +1854,39 @@
       var nrecT = toggle(!!FL.noRecoil, function (on) { window.__pbx.noRecoil(on); });
       pGac.appendChild(rowRisk('No recoil', nrecT.node, 'Recoil nol'));
 
-      /* MISC */
       var pMisc = addTab('misc', 'MISC');
       pMisc.appendChild(sec('fa-right-left', 'Quick Swap'));
       var qcT = toggle(!!(window.__pbqc && window.__pbqc.st().on), function (on) { if (on) window.__pbqc.on(); else window.__pbqc.off(); });
       pMisc.appendChild(row('Quick swap', qcT.node, 'Ganti senjata instan'));
       var qcFastT = toggle(!!(window.__pbqc && window.__pbqc.st().fast), function (on) { window.__pbqc.cfg({ fast: on ? 1 : 0 }); });
       pMisc.appendChild(row('Instant swap', qcFastT.node, 'Skip animasi'));
-      var swapBtn = el('div', 'fk-btn');
-      swapBtn.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i> Swap (Q)';
+      var swapBtn = el('div', 'fk-btn'); swapBtn.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i> Swap (Q)';
       swapBtn.addEventListener('click', function () { try { window.__pbqc.swap(); } catch (e) {} });
-      var swapWrap = el('div', 'fk-btns');
-      swapWrap.appendChild(swapBtn); pMisc.appendChild(swapWrap);
-
+      var swapWrap = el('div', 'fk-btns'); swapWrap.appendChild(swapBtn); pMisc.appendChild(swapWrap);
       pMisc.appendChild(sec('fa-heart', 'Survival'));
       var irT = toggle(!!IR.on, function (on) { window.__pbx.respawn(on); });
       pMisc.appendChild(row('Instant respawn', irT.node, 'Hidup langsung'));
       var godT = toggle(!!FL.godmode, function (on) { window.__pbx.godmode(on); });
-      pMisc.appendChild(rowRisk('Godmode', godT.node, 'Unlimited spawn flicker'));
+      pMisc.appendChild(rowRisk('Godmode', godT.node, 'Spawn flicker'));
       var ncT = toggle(!!FL.noclip, function (on) { window.__pbx.noclip(on); });
       pMisc.appendChild(rowRisk('Noclip', ncT.node, 'Tembus dinding'));
-
       pMisc.appendChild(sec('fa-toolbox', 'Utility'));
       var nadeT = toggle(!!(window.__pbnade && window.__pbnade.is()), function (on) { window.__pbx.nadeAim(on); });
       pMisc.appendChild(rowRisk('Nade aim', nadeT.node, 'Grenade auto-target'));
       var akT = toggle(!!FL.antiKick, function (on) { window.__pbx.antiKick(on); });
       pMisc.appendChild(rowRisk('Anti-kick', akT.node, 'Blokir kick/ban'));
 
-      /* INFO */
       var pInfo = addTab('info', 'INFO');
       pInfo.appendChild(sec('fa-signal', 'Status'));
-      var foot = el('div', 'fk-foot', '');
-      pInfo.appendChild(foot);
-      var statBox = el('div', 'fk-foot', '');
-      statBox.style.marginTop = '3px'; pInfo.appendChild(statBox);
+      var foot = el('div', 'fk-foot', ''); pInfo.appendChild(foot);
+      var statBox = el('div', 'fk-foot', ''); statBox.style.marginTop = '3px'; pInfo.appendChild(statBox);
       pInfo.appendChild(sec('fa-key', 'Bypass'));
       var bypassInfo = el('div', null, '');
       bypassInfo.style.cssText = 'font-size:9px;line-height:1.4;color:#a0aab5';
-      bypassInfo.innerHTML = '<div>L1 preboot · flex gate (qa/ji/Ui)</div><div>L2 hide · L3 self-heal · L4 fp-rotate</div><div>L5 direct-state-write (anti isTrusted)</div><div>L6 probe-hide</div>';
+      bypassInfo.innerHTML = '<div>L1 preboot · flex gate (qa/ji/Ui)</div><div>L1b integrity check bypass</div><div>L2 hide · L3 self-heal · L4 fp-rotate</div><div>L5 direct-state-write</div>';
       pInfo.appendChild(bypassInfo);
       pInfo.appendChild(sec('fa-triangle-exclamation', 'Danger'));
-      var resetBtn = el('div', 'fk-btn danger');
-      resetBtn.innerHTML = '<i class="fa-solid fa-trash-can"></i> Reset semua';
+      var resetBtn = el('div', 'fk-btn danger'); resetBtn.innerHTML = '<i class="fa-solid fa-trash-can"></i> Reset';
       resetBtn.addEventListener('click', function () {
         try {
           window.__pb.off(); window.__pbvis.on(); window.__pbnade.on();
@@ -2176,14 +1898,11 @@
           window.__pbx.wallbang(1); window.__pbx.infAmmo(1); window.__pbx.noRecoil(1);
           window.__pbx.godmode(0); window.__pbx.noclip(0); window.__pbx.nadeAim(1);
           window.__pbx.antiKick(1); window.__pbx.smoothFire(1);
-          window.__pb.aimbot(0);
-          window.__pbvis.bone(0);
-          window.__pb.hitbox('head');
+          window.__pb.aimbot(0); window.__pbvis.bone(0); window.__pb.hitbox('head');
           syncAll();
         } catch (e) {}
       });
-      var resetWrap = el('div', 'fk-btns');
-      resetWrap.appendChild(resetBtn); pInfo.appendChild(resetWrap);
+      var resetWrap = el('div', 'fk-btns'); resetWrap.appendChild(resetBtn); pInfo.appendChild(resetWrap);
       pInfo.appendChild(el('div', 'fk-warn', 'Fitur RISK bisa terdeteksi server.'));
 
       function refreshFoot() {
@@ -2211,8 +1930,7 @@
             povCircleS.set(window.__pb.state().povCircleR);
             hitboxSelect.value = window.__pb.state().hitbox;
             aimbotT.set(!!window.__pb.state().aimbot);
-            abGainS.set(P.aimbotGain);
-            abHoldS.set(P.aimbotHoldMs);
+            abGainS.set(P.aimbotGain); abHoldS.set(P.aimbotHoldMs);
           }
           if (window.__pbvis) espT.set(!!window.__pbvis.is());
           if (window.__pbqc) { var q = window.__pbqc.st(); qcT.set(!!q.on); qcFastT.set(!!q.fast); }
@@ -2231,21 +1949,18 @@
       }
       setInterval(syncAll, 1000);
 
-      /* DRAG */
       (function () {
         var dragging = false, ox = 0, oy = 0;
         head.addEventListener('mousedown', function (e) {
           if (e.target === toggleBtn) return;
           dragging = true;
           var r = panel.getBoundingClientRect();
-          ox = e.clientX - r.left; oy = e.clientY - r.top;
-          e.preventDefault();
+          ox = e.clientX - r.left; oy = e.clientY - r.top; e.preventDefault();
         });
         head.addEventListener('touchstart', function (e) {
           if (e.target === toggleBtn) return;
           if (!e.touches || !e.touches[0]) return;
-          var t = e.touches[0];
-          dragging = true;
+          var t = e.touches[0]; dragging = true;
           var r = panel.getBoundingClientRect();
           ox = t.clientX - r.left; oy = t.clientY - r.top;
         }, { passive: true });
@@ -2254,18 +1969,14 @@
           var x = e.clientX - ox, y = e.clientY - oy;
           x = Math.max(4, Math.min(innerWidth - 60, x));
           y = Math.max(4, Math.min(innerHeight - 40, y));
-          panel.style.left = x + 'px'; panel.style.top = y + 'px';
-          panel.style.right = 'auto';
+          panel.style.left = x + 'px'; panel.style.top = y + 'px'; panel.style.right = 'auto';
         });
         addEventListener('touchmove', function (e) {
-          if (!dragging) return;
-          if (!e.touches || !e.touches[0]) return;
-          var t = e.touches[0];
-          var x = t.clientX - ox, y = t.clientY - oy;
+          if (!dragging) return; if (!e.touches || !e.touches[0]) return;
+          var t = e.touches[0]; var x = t.clientX - ox, y = t.clientY - oy;
           x = Math.max(4, Math.min(innerWidth - 60, x));
           y = Math.max(4, Math.min(innerHeight - 40, y));
-          panel.style.left = x + 'px'; panel.style.top = y + 'px';
-          panel.style.right = 'auto';
+          panel.style.left = x + 'px'; panel.style.top = y + 'px'; panel.style.right = 'auto';
         }, { passive: true });
         addEventListener('mouseup', function () { dragging = false; });
         addEventListener('touchend', function () { dragging = false; });
@@ -2285,7 +1996,6 @@
         refreshFoot();
       }
       mount();
-
       log('iRiLLL MODZ UI ready');
     })();
   }
