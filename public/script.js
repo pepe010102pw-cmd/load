@@ -1,6 +1,6 @@
 /* ============================================================
    iRiLLL MODZ — LOGIC.JS
-   version: 2.8.2  (integrity bypass + bone-accurate aim)
+   version: 2.8.3  (PC-safe aimbot + merged silent/wallbang patch)
    License: LOCAL KEYLIST (offline, no pastefy)
    ============================================================ */
 (function () {
@@ -128,21 +128,25 @@
   }
 
   function bootCore() {
-    var V = '2.8.2';
+    var V = '2.8.3';
     var BRAND = 'iRiLLL MODZ';
     function log() { try { console.log.apply(console, ['[iR]'].concat([].slice.call(arguments))); } catch (e) {} }
 
     /* ============================================================
-       L1 PREBOOT — integrity bypass + flex gate
+       L1 PREBOOT — integrity bypass + flex gate (PC-safe)
        ============================================================ */
     (function preboot() {
       try {
         if (!/\/jogo|game\.html/.test(location.pathname)) return;
-        if (window.G || window.HUDO || window.GAME_READY) return;
         if (window.__pbBoot) return;
         window.__pbBoot = 1;
         try { var nb = +sessionStorage.getItem('pb_noboot') || 0; if (nb && Date.now() - nb < 120000) return; } catch (e0) {}
-        if (document.readyState === 'complete') return;
+
+        // sudah ada G? langsung sukses
+        if (window.G && window.G.P && window.G.P.s) { log('G already present, skip preboot'); return; }
+        var alreadyUp = !!window.HUDO || !!window.GAME_READY;
+        if (alreadyUp && !window.G) log('late preboot (G missing) — re-patching bundle');
+
         function xget(u, accept) {
           var x = new XMLHttpRequest(); x.open('GET', u, false);
           try { x.setRequestHeader('Accept', accept); } catch (e) {}
@@ -151,11 +155,12 @@
           return x.responseText;
         }
         var html = xget(location.href, 'text/html,*/*');
-        if (html.indexOf('/static/game/bundle.js') < 0) return;
+        if (html.indexOf('/static/game/bundle.js') < 0) { log('bundle.js not in html, skip'); return; }
         var bm = /src="([^"]*\/static\/game\/bundle\.js[^"]*)"/.exec(html);
-        if (!bm) return;
+        if (!bm) { log('bundle.js script tag not matched'); return; }
         var bsrc = xget(new URL(bm[1], location.href).href, '*/*');
 
+        // ---- integrity check ----
         var integrityRe = /if\(!\(\(\)=>\{try\{const e=document\.currentScript,t=e&&e\.src&&new URL\(e\.src\);return!!t&&t\.origin===location\.origin&&"\/static\/game\/bundle\.js"===t\.pathname\}catch\(e\)\{return!1\}\}\)\(\)\)\{try\{location\.replace\("\/"\)\}catch\(t\)\{\}throw new Error\("pb"\)\}/;
         if (integrityRe.test(bsrc)) {
           bsrc = bsrc.replace(integrityRe, 'if(0){}');
@@ -165,27 +170,55 @@
           log('integrity check fallback applied');
         }
 
-        var gateFlex = /([A-Za-z_$][\w$]*)="localhost"===location\.hostname\|\|"127\.0\.0\.1"===location\.hostname\|\|"\[::1\]"===location\.hostname/g;
+        // ---- gate patch (multi-regex) ----
         var patched = false, foundIds = [];
-        bsrc = bsrc.replace(gateFlex, function (full, ident) {
-          foundIds.push(ident); patched = true; return ident + '=!0';
-        });
+
+        // 1) varian persis
+        var re1 = /([A-Za-z_$][\w$]*)="localhost"===location\.hostname\|\|"127\.0\.0\.1"===location\.hostname\|\|"\[::1\]"===location\.hostname/g;
+        bsrc = bsrc.replace(re1, function (full, ident) { foundIds.push(ident); patched = true; return ident + '=!0'; });
+
+        // 2) varian spasi
+        var re2 = /([A-Za-z_$][\w$]*)\s*=\s*"localhost"\s*===\s*location\.hostname\s*\|\|\s*"127\.0\.0\.1"\s*===\s*location\.hostname\s*\|\|\s*"\[::1\]"\s*===\s*location\.hostname/g;
+        bsrc = bsrc.replace(re2, function (full, ident) { foundIds.push(ident + '(sp)'); patched = true; return ident + '=!0'; });
+
+        // 3) varian const
         if (!patched) {
-          var gateUi = /const\s+([A-Za-z_$][\w$]*)="localhost"===location\.hostname\|\|"127\.0\.0\.1"===location\.hostname\|\|"\[::1\]"===location\.hostname,/;
-          var mUi = gateUi.exec(bsrc);
-          if (mUi) {
-            bsrc = bsrc.replace(mUi[0], 'const ' + mUi[1] + '=!0,');
-            foundIds.push(mUi[1] + '(legacy-comma)'); patched = true;
-          }
+          var re3 = /const\s+([A-Za-z_$][\w$]*)\s*=\s*"localhost"\s*===\s*location\.hostname\s*\|\|\s*"127\.0\.0\.1"\s*===\s*location\.hostname\s*\|\|\s*"\[::1\]"\s*===\s*location\.hostname\s*,/;
+          var m3 = re3.exec(bsrc);
+          if (m3) { bsrc = bsrc.replace(m3[0], 'const ' + m3[1] + '=!0,'); foundIds.push(m3[1] + '(const)'); patched = true; }
         }
-        if (!patched) { log('gate tidak cocok, abort'); return; }
+
+        // 4) varian single-quote
+        if (!patched) {
+          var re4 = /([A-Za-z_$][\w$]*)\s*=\s*'localhost'\s*===\s*location\.hostname\s*\|\|\s*'127\.0\.0\.1'\s*===\s*location\.hostname\s*\|\|\s*'\[::1\]'\s*===\s*location\.hostname/g;
+          bsrc = bsrc.replace(re4, function (full, ident) { foundIds.push(ident + "(sq)"); patched = true; return ident + '=!0'; });
+        }
+
+        // 5) FALLBACK: injector yang cari G via heuristic kalau gate gagal
+        if (!patched) {
+          log('gate regex tidak cocok — pakai injector fallback');
+          var injector =
+            '\n;try{(function(){' +
+            'var tries=0;var iv=setInterval(function(){' +
+            'try{ if(window.G&&window.G.P&&window.G.P.s){clearInterval(iv);return;}' +
+            '  for(var k in window){if(k.charAt(0)==="_")continue;try{var c=window[k];' +
+            '    if(c&&typeof c==="object"&&c.P&&c.P.s&&c.camera&&c.bots&&typeof c.cast==="function"&&typeof c.fire==="function"){' +
+            '      window.G=c;clearInterval(iv);' +
+            '      console.log("[iR-inject] window.G recovered via",k);return;}}}catch(_){}}' +
+            '  if(++tries>200)clearInterval(iv);' +
+            '},100);})();}catch(e){}';
+          bsrc = bsrc + injector;
+          patched = true;
+          foundIds.push('injector-fallback');
+        }
         log('gate patched:', foundIds.join(', '));
 
+        // ---- rebuild page ----
         var parsed = new DOMParser().parseFromString(html, 'text/html');
         var scripts = [].slice.call(parsed.querySelectorAll('script')).map(function (s) {
           return { src: s.getAttribute('src'), text: s.textContent, type: s.getAttribute('type') || '' };
         });
-        if (!scripts.length) return;
+        if (!scripts.length) { log('no scripts found, abort'); return; }
         [].slice.call(parsed.querySelectorAll('script')).forEach(function (s) { if (s.parentNode) s.parentNode.removeChild(s); });
         var dt = parsed.doctype ? '<!doctype ' + parsed.doctype.name + '>' : '<!doctype html>';
         var clean = dt + parsed.documentElement.outerHTML;
@@ -198,6 +231,7 @@
         } catch (e4) {}
         try { document.open(); document.write(clean); document.close(); }
         catch (e2) { try { sessionStorage.setItem('pb_noboot', String(Date.now())); } catch (e3) {} location.reload(); return; }
+
         var i = 0;
         function next() {
           while (i < scripts.length) {
@@ -228,13 +262,13 @@
         next();
         setTimeout(function () {
           try {
-            if (window.HUDO || window.GAME_READY) return;
+            if (window.G && window.G.P && window.G.P.s) return;
             if (document.querySelector('canvas')) return;
             try { sessionStorage.setItem('pb_noboot', String(Date.now())); } catch (e) {}
             location.reload();
           } catch (e) {}
         }, 20000);
-      } catch (e) {}
+      } catch (e) { log('preboot err', e && e.message); }
     })();
 
     var HIDDEN = { pb: null, pbvis: null, pbnade: null, pbqc: null, pbx: null };
@@ -286,7 +320,7 @@
     var SF = { on: 1 };
 
     var AIM = { dx: 0, dy: 0, queued: false };
-    var AIMLOCK = { on: false, targetYaw: 0, targetPitch: 0, locked: false, smooth: 1.0 };
+    var AIMLOCK = { on: false, targetYaw: 0, targetPitch: 0, locked: false, smooth: 1.0, holdUntil: 0 };
 
     function aimWrite(dx, dy) { AIM.dx += dx; AIM.dy += dy; AIM.queued = true; }
     function aimFlush(g) {
@@ -307,32 +341,44 @@
       else { s.yaw = ny; s.pitch = np; }
       AIM.dx = AIM.dy = 0;
     }
+
     function lockYawPitch(s) {
-      if (!s || s.__pbYawLocked) return;
+      if (!s) return;
+      if (s.__pbYawLocked && s.__pbYawRaw != null) return;
       try {
-        var ownY = Object.getOwnPropertyDescriptor(s, 'yaw');
-        var ownP = Object.getOwnPropertyDescriptor(s, 'pitch');
-        s.__pbYawRaw   = ownY ? ownY.value   : (s.yaw   || 0);
-        s.__pbPitchRaw = ownP ? ownP.value   : (s.pitch || 0);
-        if (!ownY || ownY.configurable) {
-          Object.defineProperty(s, 'yaw', {
-            configurable: true,
-            get: function () { return AIMLOCK.locked ? AIMLOCK.targetYaw : this.__pbYawRaw; },
-            set: function (v) { if (!AIMLOCK.locked) this.__pbYawRaw = v; }
-          });
+        if (s.__pbYawRaw == null) {
+          var ownY = Object.getOwnPropertyDescriptor(s, 'yaw');
+          s.__pbYawRaw = (ownY && ownY.value != null) ? ownY.value : (+s.yaw || 0);
         }
-        if (!ownP || ownP.configurable) {
-          Object.defineProperty(s, 'pitch', {
-            configurable: true,
-            get: function () { return AIMLOCK.locked ? AIMLOCK.targetPitch : this.__pbPitchRaw; },
-            set: function (v) { if (!AIMLOCK.locked) this.__pbPitchRaw = v; }
-          });
+        if (s.__pbPitchRaw == null) {
+          var ownP = Object.getOwnPropertyDescriptor(s, 'pitch');
+          s.__pbPitchRaw = (ownP && ownP.value != null) ? ownP.value : (+s.pitch || 0);
+        }
+        var dY = Object.getOwnPropertyDescriptor(s, 'yaw');
+        if (!dY || (dY.get && !dY.set) || dY.configurable) {
+          try {
+            Object.defineProperty(s, 'yaw', {
+              configurable: true, enumerable: true,
+              get: function () { return AIMLOCK.locked ? AIMLOCK.targetYaw : this.__pbYawRaw; },
+              set: function (v) { if (!AIMLOCK.locked) this.__pbYawRaw = v; }
+            });
+          } catch (e) {}
+        }
+        var dP = Object.getOwnPropertyDescriptor(s, 'pitch');
+        if (!dP || (dP.get && !dP.set) || dP.configurable) {
+          try {
+            Object.defineProperty(s, 'pitch', {
+              configurable: true, enumerable: true,
+              get: function () { return AIMLOCK.locked ? AIMLOCK.targetPitch : this.__pbPitchRaw; },
+              set: function (v) { if (!AIMLOCK.locked) this.__pbPitchRaw = v; }
+            });
+          } catch (e) {}
         }
         s.__pbYawLocked = true;
-        log('yaw/pitch locked on player');
+        log('yaw/pitch locked on player (PC+Mobile safe)');
       } catch (e) { log('lockYawPitch fail', e); }
     }
-     
+
     var DBG = { el: null, n: 0 };
     function dbg(t) {
       try {
@@ -352,11 +398,41 @@
       else if (!DBG.n) { dbg('iRiLLL MODZ'); }
     }, 1000);
 
+    /* ============================================================
+       GAME GETTER — PC-safe fallback
+       ============================================================ */
+    var __G_cache = null, __G_miss = 0;
     function game() {
       try {
         var g = window.G;
-        if (g && g.P && g.P.s && g.camera && g.bots) return g;
+        if (g && g.P && g.P.s && g.camera && g.bots) { __G_cache = g; __G_miss = 0; return g; }
       } catch (e) {}
+      if (__G_cache) {
+        try {
+          if (__G_cache.P && __G_cache.P.s && __G_cache.camera && __G_cache.bots) return __G_cache;
+        } catch (e) { __G_cache = null; }
+      }
+      if (++__G_miss % 30 === 0) {
+        try {
+          if (window.HUDO && window.HUDO.__G) {
+            var hg = window.HUDO.__G;
+            if (hg && hg.P && hg.P.s && hg.camera && hg.bots) { __G_cache = hg; return hg; }
+          }
+          for (var k in window) {
+            if (k.charAt(0) === '_') continue;
+            try {
+              var cand = window[k];
+              if (!cand || typeof cand !== 'object') continue;
+              if (cand.P && cand.P.s && cand.camera && cand.bots && typeof cand.cast === 'function' && typeof cand.fire === 'function') {
+                __G_cache = cand;
+                try { window.G = cand; } catch (e) {}
+                log('window.G recovered via key:', k);
+                return cand;
+              }
+            } catch (e) {}
+          }
+        } catch (e) {}
+      }
       return null;
     }
     function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -370,16 +446,22 @@
        BONE-ACCURATE TARGET POINT
        ============================================================ */
     function headPoint(p) {
-      var by = p.c && p.c.byName; if (!by) return null;
+      if (!p || !p.c) return null;
+      var by = p.c.byName; if (!by) return null;
       var h = by.Head || by.head || null;
       var g = by.Bone_HeadGearAttach || null;
-      if (h) {
+      var validH = h && h.matrixWorld && h.matrixWorld.elements;
+      var validG = g && g.matrixWorld && g.matrixWorld.elements;
+      if (validH) {
         wpos(h, _hpOut);
-        if (g) { wpos(g, A); _hpOut.y = (_hpOut.y + A.y) * 0.5 + P.headBias; }
+        if (validG) { wpos(g, A); _hpOut.y = (_hpOut.y + A.y) * 0.5 + P.headBias; }
         else { _hpOut.y += P.headBias; }
-        return _hpOut;
+        if (isFinite(_hpOut.x) && isFinite(_hpOut.y) && isFinite(_hpOut.z)) return _hpOut;
       }
-      if (g) { wpos(g, _hpOut); _hpOut.y -= 0.12 - P.headBias; return _hpOut; }
+      if (validG) {
+        wpos(g, _hpOut); _hpOut.y -= 0.12 - P.headBias;
+        if (isFinite(_hpOut.x) && isFinite(_hpOut.y) && isFinite(_hpOut.z)) return _hpOut;
+      }
       return null;
     }
     function bodyPoint(p) {
@@ -391,7 +473,11 @@
     }
     function headPointLogical(p) {
       var s = p && p.mover && p.mover.pos; if (!s) return null;
-      _hpOut.x = s.x; _hpOut.y = s.y + (p.mover.crouch ? 1.25 : 1.8) + P.headBias; _hpOut.z = s.z;
+      var h = p.mover.crouch ? 1.15 : 1.68;
+      if (typeof p.eyeH === 'number' && p.eyeH > 0) h = p.eyeH + (p.mover.crouch ? -0.1 : 0.05);
+      _hpOut.x = s.x;
+      _hpOut.y = s.y + h + P.headBias;
+      _hpOut.z = s.z;
       return _hpOut;
     }
     function bodyPointLogical(p) {
@@ -504,19 +590,37 @@
 
     function tick() {
       requestAnimationFrame(tick);
-      if (!G) { G = game(); if (!G) return; st.G = true; log('G unlocked', V); try { buzz(30); } catch (e) {} }
+      if (!G) {
+        G = game();
+        if (!G) {
+          if (++__G_warn === 60 || __G_warn % 600 === 0) {
+            log('G missing — host=' + location.hostname + ' GAME_READY=' + !!window.GAME_READY + ' HUDO=' + !!window.HUDO);
+          }
+          return;
+        }
+        st.G = true; log('G unlocked', V); try { buzz(30); } catch (e) {}
+      }
+      if (G !== __G_cache) __G_cache = G;
+
       var g = G, self = g.P.s, cam = g.camera;
-      if (!self || self.dead) { if (holding) up(); lastPick = null; st.lock = 0; AB.target = null; AB.freshFire = 0; AIMLOCK.locked = false; return; }
+      if (!self || self.dead) {
+        if (holding) up();
+        lastPick = null; st.lock = 0; AB.target = null; AB.freshFire = 0;
+        AIMLOCK.locked = false; AIMLOCK.on = false;
+        if (self && self.__pbYawLocked) { self.__pbYawLocked = false; }
+        return;
+      }
 
       lockYawPitch(self);
 
       var now = performance.now(), m = cam.matrixWorld.elements;
       C.x = m[12]; C.y = m[13]; C.z = m[14];
-      var yaw = +self.yaw || 0, pitch = +self.pitch || 0;
+      var yaw = +((self.__pbYawRaw != null) ? self.__pbYawRaw : self.yaw) || 0;
+      var pitch = +((self.__pbPitchRaw != null) ? self.__pbPitchRaw : self.pitch) || 0;
       var cp = Math.cos(pitch);
       F.x = -Math.sin(yaw) * cp; F.y = Math.sin(pitch); F.z = -Math.cos(yaw) * cp;
 
-      var list = g.bots;
+      var list = g.bots || [];
 
       var best = null, bestP = null, bestA = 1e9, bestD = 1e9, myTeam = self.team, n = 0, en = 0;
       for (var i = 0; i < list.length; i++) {
@@ -560,34 +664,45 @@
 
       if (doAimbot && AB.target) {
         var ap = AB.target.p;
-        var tYawAb   = Math.atan2(-(ap.x - C.x), -(ap.z - C.z));
-        var tPitchAb = Math.asin(clamp((ap.y - C.y) / Math.max(0.001, Math.hypot(ap.x - C.x, ap.y - C.y, ap.z - C.z)), -1, 1));
+        var dxA = ap.x - C.x, dyA = ap.y - C.y, dzA = ap.z - C.z;
+        var distA = Math.max(0.001, Math.sqrt(dxA*dxA + dyA*dyA + dzA*dzA));
+        var tYawAb   = Math.atan2(-dxA, -dzA);
+        var tPitchAb = Math.asin(clamp(dyA / distA, -1, 1));
         while (tYawAb >  Math.PI) tYawAb -= 2 * Math.PI;
         while (tYawAb < -Math.PI) tYawAb += 2 * Math.PI;
-        var rawY = self.__pbYawRaw || 0, rawP = self.__pbPitchRaw || 0;
+        var rawY = (self.__pbYawRaw != null ? self.__pbYawRaw : +self.yaw) || 0;
+        var rawP = (self.__pbPitchRaw != null ? self.__pbPitchRaw : +self.pitch) || 0;
         var k = Math.min(1, Math.max(0.15, P.aimbotGain * 0.5));
         AIMLOCK.on = true; AIMLOCK.locked = true;
+        AIMLOCK.holdUntil = now + P.aimbotHoldMs;
         AIMLOCK.targetYaw   = rawY + wrap(tYawAb - rawY) * k;
         AIMLOCK.targetPitch = rawP + (tPitchAb - rawP) * k;
-        st.aimbot = 1;
+        st.aimbot = 1; st.lock = 1; st.dist = distA;
       } else {
         st.aimbot = 0;
         if (!best || !aimOn) {
-          AIMLOCK.locked = false; lastPick = null; st.lock = 0;
-          if (holding) up();
-          aimFlush(g);
-          return;
+          if (AIMLOCK.locked && now < AIMLOCK.holdUntil) {
+            st.aimbot = 1;
+          } else {
+            AIMLOCK.locked = false; lastPick = null; st.lock = 0;
+            if (holding) up();
+            aimFlush(g);
+            return;
+          }
+        } else {
+          var dxB = bestP.x - C.x, dyB = bestP.y - C.y, dzB = bestP.z - C.z;
+          var tYaw   = Math.atan2(-dxB, -dzB);
+          var tPitch = Math.asin(clamp(dyB / Math.max(0.001, bestD), -1, 1));
+          while (tYaw >  Math.PI) tYaw -= 2 * Math.PI;
+          while (tYaw < -Math.PI) tYaw += 2 * Math.PI;
+          var rawY2 = (self.__pbYawRaw != null ? self.__pbYawRaw : +self.yaw) || 0;
+          var rawP2 = (self.__pbPitchRaw != null ? self.__pbPitchRaw : +self.pitch) || 0;
+          var kk = Math.min(1, Math.max(0.05, P.gain));
+          AIMLOCK.on = true; AIMLOCK.locked = true;
+          AIMLOCK.targetYaw   = rawY2 + wrap(tYaw - rawY2) * kk;
+          AIMLOCK.targetPitch = rawP2 + (tPitch - rawP2) * kk;
+          st.err = bestA; st.dist = bestD; st.lock = 1; lastPick = best;
         }
-        var tYaw   = Math.atan2(-(bestP.x - C.x), -(bestP.z - C.z));
-        var tPitch = Math.asin(clamp((bestP.y - C.y) / Math.max(0.001, bestD), -1, 1));
-        while (tYaw >  Math.PI) tYaw -= 2 * Math.PI;
-        while (tYaw < -Math.PI) tYaw += 2 * Math.PI;
-        var rawY2 = self.__pbYawRaw || 0, rawP2 = self.__pbPitchRaw || 0;
-        var kk = Math.min(1, Math.max(0.05, P.gain));
-        AIMLOCK.on = true; AIMLOCK.locked = true;
-        AIMLOCK.targetYaw   = rawY2 + wrap(tYaw - rawY2) * kk;
-        AIMLOCK.targetPitch = rawP2 + (tPitch - rawP2) * kk;
-        st.err = bestA; st.dist = bestD; st.lock = 1; lastPick = best;
       }
 
       if (!(P.autoFire || fireHeld) || now < nextTap || holding) {
@@ -604,8 +719,21 @@
       }
       var hit = null;
       try { hit = hitTestSafe(fireTarget, C, F, P.reach); } catch (e) { hit = null; }
+      if (!hit) {
+        if (P.aimbotOn) {
+          var hp3 = headPoint(fireTarget) || headPointLogical(fireTarget);
+          if (hp3) {
+            var ddx = hp3.x - C.x, ddy = hp3.y - C.y, ddz = hp3.z - C.z;
+            var dd = Math.sqrt(ddx*ddx + ddy*ddy + ddz*ddz);
+            if (dd > 0.001) {
+              F.x = ddx/dd; F.y = ddy/dd; F.z = ddz/dd;
+              hit = { t: dd, head: true, part: 'head' };
+            }
+          }
+        }
+      }
       if (!hit) { aimFlush(g); return; }
-      if (P.hitbox === 'head') { if (!hit.head) { aimFlush(g); return; } }
+      if (P.hitbox === 'head' && !hit.head) { aimFlush(g); return; }
 
       down(); holding = true;
       var holdMs, gapMs;
@@ -671,7 +799,7 @@
       unlock: function () { AIMLOCK.locked = false; return 'unlocked'; }
     };
     window.__pb = PB_API; HIDDEN.pb = PB_API;
-     
+
     /* ====== ESP ====== */
     var E = { on: 1, wrap: null, host: null, hostAt: 0, slots: [], last: 0, n: 0 };
     function eInit() {
@@ -831,10 +959,70 @@
       ctx.shadowBlur = 0;
     }
 
+    /* ============================================================
+       BOSS PATCH — wallbang + silent aim (merged, anti-double-wrap)
+       ============================================================ */
+    var WB = 200;
+    function wbGun() {
+      try {
+        var g = G || game();
+        if (!g || !g.P) return false;
+        var w = null;
+        try { w = g.P.W; } catch (e) { w = null; }
+        if (!w) return false;
+        return !(w.melee || w.grenade || w.c4);
+      } catch (e) { return false; }
+    }
+    var BOSS_PATCHED = new WeakSet();
+    function bossPatch() {
+      var g = G || game(); var L = g && g.bots; if (!L || !L.length) return;
+      for (var i = 0; i < L.length; i++) {
+        var b = L[i];
+        if (!b || typeof b.hitTest !== 'function') continue;
+        if (BOSS_PATCHED.has(b)) continue;
+        BOSS_PATCHED.add(b);
+        var orig = b.hitTest;
+        b.__pbOrig = orig;
+        b.hitTest = function (o, d, m) {
+          var reach = m;
+          try {
+            if (FL.wallbang && wbGun() && typeof m === 'number' && m < WB) reach = WB;
+          } catch (e) {}
+          try {
+            if (SA.on && wbGun()) {
+              var g2 = G || game();
+              if (g2 && g2.camera && g2.camera.matrixWorld) {
+                var hp = headPoint(this) || headPointLogical(this);
+                if (hp) {
+                  var cam = g2.camera.matrixWorld.elements;
+                  var ox = cam[12], oy = cam[13], oz = cam[14];
+                  var dx = hp.x - ox, dy = hp.y - oy, dz = hp.z - oz;
+                  var len = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                  if (len > 1) {
+                    var no = { x: ox, y: oy, z: oz };
+                    var nd = { x: dx/len, y: dy/len, z: dz/len };
+                    var r = orig.call(this, no, nd, len + 1);
+                    if (r) {
+                      r.head = true;
+                      if (!r.part) r.part = 'head';
+                      return r;
+                    }
+                  }
+                }
+              }
+            }
+          } catch (e) {}
+          try { return orig.call(this, o, d, reach); } catch (e) { return null; }
+        };
+      }
+    }
+    var SA = { on: 0 };
+    function saPatch() { bossPatch(); }
+
     function eFrame() {
       requestAnimationFrame(eFrame);
       var g = G || game();
-      if (g) { try { wbPatch(); } catch (e) {} try { ammoTick(); } catch (e) {} try { dmgTick(); } catch (e) {} }
+      if (g) { try { bossPatch(); } catch (e) {} try { ammoTick(); } catch (e) {} try { dmgTick(); } catch (e) {} }
       if (!E.on) { eClear(); } else {
         var t = performance.now();
         if (t - E.last < 33) {} else {
@@ -870,26 +1058,6 @@
       }
     };
     window.__pbvis = VIS_API; HIDDEN.pbvis = VIS_API;
-
-    var WB = 200;
-    function wbGun() {
-      try { var g = G || game(); var w = g && g.P && g.P.W; return !!(w && !w.melee && !w.grenade && !w.c4); } catch (e) { return false; }
-    }
-    function wbPatch() {
-      if (!FL.wallbang) return;
-      var g = G || game(); var L = g && g.bots; if (!L || !L.length) return;
-      for (var i = 0; i < L.length; i++) {
-        var b = L[i];
-        if (!b || b.__wb || typeof b.hitTest !== 'function') continue;
-        b.__wb = 1;
-        (function (b, f) {
-          b.hitTest = function (o, d, m) {
-            var r = (FL.wallbang && wbGun() && typeof m === 'number') ? WB : m;
-            try { return f.call(this, o, d, r); } catch (e) { return null; }
-          };
-        })(b, b.hitTest);
-      }
-    }
 
     var AM = { at: 0 };
     function ammoTick() {
@@ -1335,33 +1503,6 @@
     }
     try { requestAnimationFrame(tbTick); } catch (e) {}
 
-    var SA = { on: 0 };
-    function saPatch() {
-      var g = G || game(); var L = g && g.bots; if (!L || !L.length) return;
-      for (var i = 0; i < L.length; i++) {
-        var b = L[i];
-        if (!b || b.__sa || typeof b.hitTest !== 'function') continue;
-        b.__sa = 1;
-        (function (b, f) {
-          b.hitTest = function (o, d, m) {
-            if (!SA.on) return f.call(this, o, d, m);
-            try {
-              var g2 = G || game(); if (!g2 || !g2.P || !g2.P.s) return f.call(this, o, d, m);
-              if (!wbGun()) return f.call(this, o, d, m);
-              var hp = headPoint(this) || headPointLogical(this); if (!hp) return f.call(this, o, d, m);
-              var cam = g2.camera, me = cam.matrixWorld.elements;
-              var ox = me[12], oy = me[13], oz = me[14];
-              var dx = hp.x - ox, dy = hp.y - oy, dz = hp.z - oz;
-              var len = Math.sqrt(dx*dx + dy*dy + dz*dz); if (len < 1) return f.call(this, o, d, m);
-              var nd = { x: dx/len, y: dy/len, z: dz/len };
-              var no = { x: ox, y: oy, z: oz };
-              return f.call(this, no, nd, len + 1);
-            } catch (e) { return f.call(this, o, d, m); }
-          };
-        })(b, b.hitTest);
-      }
-    }
-
     var IR = { on: 0, at: 0 };
     function irTick() {
       requestAnimationFrame(irTick);
@@ -1547,14 +1688,23 @@
       fastReload: function (on) { FR.on = on ? 1 : 0; return FR.on; },
       instScope: function (on) { IS.on = on ? 1 : 0; return IS.on; },
       trig: function (on) { TB.on = on ? 1 : 0; return TB.on; },
-      silent: function (on) { SA.on = on ? 1 : 0; saPatch(); return SA.on; },
+      silent: function (on) {
+        SA.on = on ? 1 : 0;
+        bossPatch();
+        try {
+          var g = G || game();
+          var n = g && g.bots ? g.bots.filter(function (b) { return BOSS_PATCHED.has(b); }).length : 0;
+          log('silent =', SA.on, '· bot patched =', n + '/' + (g && g.bots ? g.bots.length : 0));
+        } catch (e) {}
+        return SA.on;
+      },
       lob: function (on) { SL.on = on ? 1 : 0; return SL.on; },
       respawn: function (on) { IR.on = on ? 1 : 0; return IR.on; },
       radar: function (on) { RD.on = on ? 1 : 0; if (!on && RD.el) RD.el.style.display = 'none'; return RD.on; },
       hpo: function (on) { HPO.on = on ? 1 : 0; return HPO.on; },
       fovc: function (on) { FC.on = on ? 1 : 0; return FC.on; },
       tracer: function (on) { TR.on = on ? 1 : 0; if (!on) trClear(); return TR.on; },
-      wallbang: function (on) { FL.wallbang = on ? 1 : 0; return FL.wallbang; },
+      wallbang: function (on) { FL.wallbang = on ? 1 : 0; bossPatch(); return FL.wallbang; },
       infAmmo: function (on) { FL.infAmmo = on ? 1 : 0; return FL.infAmmo; },
       noRecoil: function (on) { FL.noRecoil = on ? 1 : 0; return FL.noRecoil; },
       godmode: function (on) { FL.godmode = on ? 1 : 0; return FL.godmode; },
@@ -1579,7 +1729,7 @@
       requestAnimationFrame(pbxFrame);
       try {
         var g = G || game(); if (!g) return;
-        if (SA.on) saPatch();
+        if (SA.on || FL.wallbang) bossPatch();
         if (RD.on) rdDraw(g);
         if (TR.on) trDraw(g);
       } catch (e) {}
@@ -1598,7 +1748,7 @@
 
     var __gCheck = setInterval(function () { if (window.G) { log('window.G exposed ✓'); clearInterval(__gCheck); } }, 1000);
     setTimeout(function () { if (!window.G) log('window.G missing — gate patch may have failed'); }, 15000);
-    
+
     /* ============================================================
        UI PANEL
        ============================================================ */
@@ -1820,7 +1970,6 @@
         try { localStorage.setItem(TAB_KEY, key); } catch (e) {}
       }
 
-      /* AIM */
       var pAim = addTab('aim', 'AIM');
       pAim.appendChild(sec('fa-crosshairs', 'Mode Aim Lock'));
       pAim.appendChild(el('div', 'fk-hint', 'Aim lock legacy: lock musuh di mana saja. Pakai Direct State Write (anti isTrusted).'));
@@ -1850,7 +1999,6 @@
       var invertT = toggle(!!O.invert, function (on) { O.invert = on; });
       pAim.appendChild(row('Invert Y', invertT.node, 'Balik arah vertikal'));
 
-      /* AIMBOT */
       var pAb = addTab('aimbot', 'AIMBOT');
       pAb.appendChild(sec('fa-bullseye', 'Aimbot (snap saat fire)'));
       pAb.appendChild(el('div', 'fk-hint', 'Kamera tidak lock sebelum tembak. Snap saat fire. Hanya musuh di dalam POV circle.'));
@@ -1874,7 +2022,6 @@
       povCircleS.label.textContent = 'Circle size';
       pAb.appendChild(povCircleS.node);
 
-      /* ESP */
       var pVis = addTab('vis', 'ESP');
       pVis.appendChild(sec('fa-layer-group', 'Overlay'));
       var espT = toggle(!!(window.__pbvis && window.__pbvis.is()), function (on) { if (on) window.__pbvis.on(); else window.__pbvis.off(); });
@@ -1894,7 +2041,6 @@
       var dmgS = slider(1.0, 3.0, 0.05, 1.3, function (v) { return 'x' + v.toFixed(2); }, function (v) { if (window.__pbvis) window.__pbvis.dmg(v); });
       dmgS.label.textContent = 'Damage'; pVis.appendChild(dmgS.node);
 
-      /* GACOR */
       var pGac = addTab('gacor', 'GACOR');
       pGac.appendChild(sec('fa-bullseye', 'Aim Enhancement'));
       var predT = toggle(!!PR.on, function (on) { window.__pbx.pred(on, PR.ms); });
@@ -1924,7 +2070,6 @@
       var nrecT = toggle(!!FL.noRecoil, function (on) { window.__pbx.noRecoil(on); });
       pGac.appendChild(rowRisk('No recoil', nrecT.node, 'Recoil nol'));
 
-      /* MISC */
       var pMisc = addTab('misc', 'MISC');
       pMisc.appendChild(sec('fa-right-left', 'Quick Swap'));
       var qcT = toggle(!!(window.__pbqc && window.__pbqc.st().on), function (on) { if (on) window.__pbqc.on(); else window.__pbqc.off(); });
@@ -1951,7 +2096,6 @@
       var akT = toggle(!!FL.antiKick, function (on) { window.__pbx.antiKick(on); });
       pMisc.appendChild(rowRisk('Anti-kick', akT.node, 'Blokir kick/ban'));
 
-      /* INFO */
       var pInfo = addTab('info', 'INFO');
       pInfo.appendChild(sec('fa-signal', 'Status'));
       var foot = el('div', 'fk-foot', '');
@@ -1961,7 +2105,7 @@
       pInfo.appendChild(sec('fa-key', 'Bypass'));
       var bypassInfo = el('div', null, '');
       bypassInfo.style.cssText = 'font-size:9px;line-height:1.4;color:#a0aab5';
-      bypassInfo.innerHTML = '<div>L1 preboot · flex gate</div><div>L1b integrity check bypass</div><div>L2 hide · L3 self-heal · L4 fp-rotate</div><div>L5 direct-state-write · L6 bone-accurate</div>';
+      bypassInfo.innerHTML = '<div>L1 preboot · flex gate (PC-safe)</div><div>L1b integrity check bypass</div><div>L2 hide · L3 self-heal · L4 fp-rotate</div><div>L5 direct-state-write · L6 bone-accurate</div><div>L7 merged silent+wallbang</div>';
       pInfo.appendChild(bypassInfo);
       pInfo.appendChild(sec('fa-triangle-exclamation', 'Danger'));
       var resetBtn = el('div', 'fk-btn danger');
@@ -2035,14 +2179,13 @@
       }
       setInterval(syncAll, 1000);
 
-      /* DRAG */
       (function () {
         var dragging = false, ox = 0, oy = 0;
         head.addEventListener('mousedown', function (e) {
           if (e.target === toggleBtn) return;
           dragging = true;
           var r = panel.getBoundingClientRect();
-          ox = t.clientX - r.left; oy = t.clientY - r.top;
+          ox = e.clientX - r.left; oy = e.clientY - r.top;
         }, { passive: true });
         addEventListener('mousemove', function (e) {
           if (!dragging) return;
