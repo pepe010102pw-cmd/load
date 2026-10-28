@@ -1,7 +1,13 @@
 /* ============================================================
-   iRiLLL MODZ — LOGIC.JS
-   version: 2.8.3  (PC-safe aimbot + merged silent/wallbang patch)
-   License: LOCAL KEYLIST (offline, no pastefy)
+   iRiLLL MODZ — SCRIPT.JS
+   version: 2.9.0
+   Changes:
+     - FIX: fireHeld / AB.freshFire untuk mouse (aimbot snap)
+     - FIX: headPointLogical / bodyPointLogical pakai obj.position
+     - FIX: silent aim pakai THREE.Vector3 (bukan plain object)
+     - FIX: lockYawPitch setter tidak early-return (NaN guard)
+     - FIX: aimFlush reset delta saat locked (anti-jump)
+     - FIX: silent aim berlaku ke SEMUA arah tembakan
    ============================================================ */
 (function () {
   'use strict';
@@ -17,7 +23,7 @@
 
   var PF_LOCAL_KEYS = [
     'IRILMODZPREMIUM','IRIL-VIP-MODZ','IRIL-ABCD-1234','IRIL-EFGH-5678','IRIL-IJKL-9012',
-    'my key 123','IRILMODZTRIAL','k','IRILMODZ7DAY'
+    'my key 123','IRILMODZTRIAL10','k','IRILMODZ7DAY'
   ];
 
   function pfGet(k, d) { try { var v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } }
@@ -127,26 +133,25 @@
     }, 30000);
   }
 
+  /* ============================================================
+     CORE
+     ============================================================ */
   function bootCore() {
-    var V = '2.8.3';
+    var V = '2.9.0';
     var BRAND = 'iRiLLL MODZ';
     function log() { try { console.log.apply(console, ['[iR]'].concat([].slice.call(arguments))); } catch (e) {} }
 
-    /* ============================================================
-       L1 PREBOOT — integrity bypass + flex gate (PC-safe)
-       ============================================================ */
+    /* ------------------------------------------------------------
+       L1 PREBOOT — integrity bypass + flex gate
+       ------------------------------------------------------------ */
     (function preboot() {
       try {
         if (!/\/jogo|game\.html/.test(location.pathname)) return;
+        if (window.G || window.HUDO || window.GAME_READY) return;
         if (window.__pbBoot) return;
         window.__pbBoot = 1;
         try { var nb = +sessionStorage.getItem('pb_noboot') || 0; if (nb && Date.now() - nb < 120000) return; } catch (e0) {}
-
-        // sudah ada G? langsung sukses
-        if (window.G && window.G.P && window.G.P.s) { log('G already present, skip preboot'); return; }
-        var alreadyUp = !!window.HUDO || !!window.GAME_READY;
-        if (alreadyUp && !window.G) log('late preboot (G missing) — re-patching bundle');
-
+        if (document.readyState === 'complete') return;
         function xget(u, accept) {
           var x = new XMLHttpRequest(); x.open('GET', u, false);
           try { x.setRequestHeader('Accept', accept); } catch (e) {}
@@ -155,12 +160,11 @@
           return x.responseText;
         }
         var html = xget(location.href, 'text/html,*/*');
-        if (html.indexOf('/static/game/bundle.js') < 0) { log('bundle.js not in html, skip'); return; }
+        if (html.indexOf('/static/game/bundle.js') < 0) return;
         var bm = /src="([^"]*\/static\/game\/bundle\.js[^"]*)"/.exec(html);
-        if (!bm) { log('bundle.js script tag not matched'); return; }
+        if (!bm) return;
         var bsrc = xget(new URL(bm[1], location.href).href, '*/*');
 
-        // ---- integrity check ----
         var integrityRe = /if\(!\(\(\)=>\{try\{const e=document\.currentScript,t=e&&e\.src&&new URL\(e\.src\);return!!t&&t\.origin===location\.origin&&"\/static\/game\/bundle\.js"===t\.pathname\}catch\(e\)\{return!1\}\}\)\(\)\)\{try\{location\.replace\("\/"\)\}catch\(t\)\{\}throw new Error\("pb"\)\}/;
         if (integrityRe.test(bsrc)) {
           bsrc = bsrc.replace(integrityRe, 'if(0){}');
@@ -170,55 +174,27 @@
           log('integrity check fallback applied');
         }
 
-        // ---- gate patch (multi-regex) ----
+        var gateFlex = /([A-Za-z_$][\w$]*)="localhost"===location\.hostname\|\|"127\.0\.0\.1"===location\.hostname\|\|"\[::1\]"===location\.hostname/g;
         var patched = false, foundIds = [];
-
-        // 1) varian persis
-        var re1 = /([A-Za-z_$][\w$]*)="localhost"===location\.hostname\|\|"127\.0\.0\.1"===location\.hostname\|\|"\[::1\]"===location\.hostname/g;
-        bsrc = bsrc.replace(re1, function (full, ident) { foundIds.push(ident); patched = true; return ident + '=!0'; });
-
-        // 2) varian spasi
-        var re2 = /([A-Za-z_$][\w$]*)\s*=\s*"localhost"\s*===\s*location\.hostname\s*\|\|\s*"127\.0\.0\.1"\s*===\s*location\.hostname\s*\|\|\s*"\[::1\]"\s*===\s*location\.hostname/g;
-        bsrc = bsrc.replace(re2, function (full, ident) { foundIds.push(ident + '(sp)'); patched = true; return ident + '=!0'; });
-
-        // 3) varian const
+        bsrc = bsrc.replace(gateFlex, function (full, ident) {
+          foundIds.push(ident); patched = true; return ident + '=!0';
+        });
         if (!patched) {
-          var re3 = /const\s+([A-Za-z_$][\w$]*)\s*=\s*"localhost"\s*===\s*location\.hostname\s*\|\|\s*"127\.0\.0\.1"\s*===\s*location\.hostname\s*\|\|\s*"\[::1\]"\s*===\s*location\.hostname\s*,/;
-          var m3 = re3.exec(bsrc);
-          if (m3) { bsrc = bsrc.replace(m3[0], 'const ' + m3[1] + '=!0,'); foundIds.push(m3[1] + '(const)'); patched = true; }
+          var gateUi = /const\s+([A-Za-z_$][\w$]*)="localhost"===location\.hostname\|\|"127\.0\.0\.1"===location\.hostname\|\|"\[::1\]"===location\.hostname,/;
+          var mUi = gateUi.exec(bsrc);
+          if (mUi) {
+            bsrc = bsrc.replace(mUi[0], 'const ' + mUi[1] + '=!0,');
+            foundIds.push(mUi[1] + '(legacy-comma)'); patched = true;
+          }
         }
-
-        // 4) varian single-quote
-        if (!patched) {
-          var re4 = /([A-Za-z_$][\w$]*)\s*=\s*'localhost'\s*===\s*location\.hostname\s*\|\|\s*'127\.0\.0\.1'\s*===\s*location\.hostname\s*\|\|\s*'\[::1\]'\s*===\s*location\.hostname/g;
-          bsrc = bsrc.replace(re4, function (full, ident) { foundIds.push(ident + "(sq)"); patched = true; return ident + '=!0'; });
-        }
-
-        // 5) FALLBACK: injector yang cari G via heuristic kalau gate gagal
-        if (!patched) {
-          log('gate regex tidak cocok — pakai injector fallback');
-          var injector =
-            '\n;try{(function(){' +
-            'var tries=0;var iv=setInterval(function(){' +
-            'try{ if(window.G&&window.G.P&&window.G.P.s){clearInterval(iv);return;}' +
-            '  for(var k in window){if(k.charAt(0)==="_")continue;try{var c=window[k];' +
-            '    if(c&&typeof c==="object"&&c.P&&c.P.s&&c.camera&&c.bots&&typeof c.cast==="function"&&typeof c.fire==="function"){' +
-            '      window.G=c;clearInterval(iv);' +
-            '      console.log("[iR-inject] window.G recovered via",k);return;}}}catch(_){}}' +
-            '  if(++tries>200)clearInterval(iv);' +
-            '},100);})();}catch(e){}';
-          bsrc = bsrc + injector;
-          patched = true;
-          foundIds.push('injector-fallback');
-        }
+        if (!patched) { log('gate tidak cocok, abort'); return; }
         log('gate patched:', foundIds.join(', '));
 
-        // ---- rebuild page ----
         var parsed = new DOMParser().parseFromString(html, 'text/html');
         var scripts = [].slice.call(parsed.querySelectorAll('script')).map(function (s) {
           return { src: s.getAttribute('src'), text: s.textContent, type: s.getAttribute('type') || '' };
         });
-        if (!scripts.length) { log('no scripts found, abort'); return; }
+        if (!scripts.length) return;
         [].slice.call(parsed.querySelectorAll('script')).forEach(function (s) { if (s.parentNode) s.parentNode.removeChild(s); });
         var dt = parsed.doctype ? '<!doctype ' + parsed.doctype.name + '>' : '<!doctype html>';
         var clean = dt + parsed.documentElement.outerHTML;
@@ -231,7 +207,6 @@
         } catch (e4) {}
         try { document.open(); document.write(clean); document.close(); }
         catch (e2) { try { sessionStorage.setItem('pb_noboot', String(Date.now())); } catch (e3) {} location.reload(); return; }
-
         var i = 0;
         function next() {
           while (i < scripts.length) {
@@ -262,13 +237,13 @@
         next();
         setTimeout(function () {
           try {
-            if (window.G && window.G.P && window.G.P.s) return;
+            if (window.HUDO || window.GAME_READY) return;
             if (document.querySelector('canvas')) return;
             try { sessionStorage.setItem('pb_noboot', String(Date.now())); } catch (e) {}
             location.reload();
           } catch (e) {}
         }, 20000);
-      } catch (e) { log('preboot err', e && e.message); }
+      } catch (e) {}
     })();
 
     var HIDDEN = { pb: null, pbvis: null, pbnade: null, pbqc: null, pbx: null };
@@ -320,20 +295,25 @@
     var SF = { on: 1 };
 
     var AIM = { dx: 0, dy: 0, queued: false };
-    var AIMLOCK = { on: false, targetYaw: 0, targetPitch: 0, locked: false, smooth: 1.0, holdUntil: 0 };
+    var AIMLOCK = { on: false, targetYaw: 0, targetPitch: 0, locked: false, smooth: 1.0 };
 
     function aimWrite(dx, dy) { AIM.dx += dx; AIM.dy += dy; AIM.queued = true; }
+
+    /* FIX: aimFlush selalu reset delta, dan pakai __pbYawRaw/__pbPitchRaw yang valid */
     function aimFlush(g) {
       if (!AIM.queued) return;
       AIM.queued = false;
-      var s = g.P && g.P.s;
+      var s = g && g.P && g.P.s;
       if (!s || s.dead) { AIM.dx = AIM.dy = 0; return; }
+      // saat locked, tetap buang delta (biar tidak numpuk dan jump saat unlock)
       if (AIMLOCK.locked) { AIM.dx = AIM.dy = 0; return; }
-      var sens = O.sens * (g.camera.fov / O.fov) * 0.005;
+      var sens = O.sens * ((g.camera && g.camera.fov || 70) / O.fov) * 0.005;
       var dyaw   = -AIM.dx * sens;
       var dpitch = (O.invert ? 1 : -1) * AIM.dy * sens;
-      var ny = (s.__pbYawRaw != null ? s.__pbYawRaw : (s.yaw || 0)) + dyaw;
-      var np = (s.__pbPitchRaw != null ? s.__pbPitchRaw : (s.pitch || 0)) + dpitch;
+      var curY = (s.__pbYawRaw   != null) ? s.__pbYawRaw   : (+s.yaw   || 0);
+      var curP = (s.__pbPitchRaw != null) ? s.__pbPitchRaw : (+s.pitch || 0);
+      var ny = curY + dyaw;
+      var np = curP + dpitch;
       while (ny >  Math.PI) ny -= 2 * Math.PI;
       while (ny < -Math.PI) ny += 2 * Math.PI;
       np = Math.max(-1.4, Math.min(1.4, np));
@@ -342,40 +322,24 @@
       AIM.dx = AIM.dy = 0;
     }
 
+    /* FIX: lockYawPitch selalu update __pbYawRaw supaya sinkron saat unlock */
     function lockYawPitch(s) {
-      if (!s) return;
-      if (s.__pbYawLocked && s.__pbYawRaw != null) return;
+      if (!s || s.__pbYawLocked) return;
+      s.__pbYawRaw   = +s.yaw   || 0;
+      s.__pbPitchRaw = +s.pitch || 0;
       try {
-        if (s.__pbYawRaw == null) {
-          var ownY = Object.getOwnPropertyDescriptor(s, 'yaw');
-          s.__pbYawRaw = (ownY && ownY.value != null) ? ownY.value : (+s.yaw || 0);
-        }
-        if (s.__pbPitchRaw == null) {
-          var ownP = Object.getOwnPropertyDescriptor(s, 'pitch');
-          s.__pbPitchRaw = (ownP && ownP.value != null) ? ownP.value : (+s.pitch || 0);
-        }
-        var dY = Object.getOwnPropertyDescriptor(s, 'yaw');
-        if (!dY || (dY.get && !dY.set) || dY.configurable) {
-          try {
-            Object.defineProperty(s, 'yaw', {
-              configurable: true, enumerable: true,
-              get: function () { return AIMLOCK.locked ? AIMLOCK.targetYaw : this.__pbYawRaw; },
-              set: function (v) { if (!AIMLOCK.locked) this.__pbYawRaw = v; }
-            });
-          } catch (e) {}
-        }
-        var dP = Object.getOwnPropertyDescriptor(s, 'pitch');
-        if (!dP || (dP.get && !dP.set) || dP.configurable) {
-          try {
-            Object.defineProperty(s, 'pitch', {
-              configurable: true, enumerable: true,
-              get: function () { return AIMLOCK.locked ? AIMLOCK.targetPitch : this.__pbPitchRaw; },
-              set: function (v) { if (!AIMLOCK.locked) this.__pbPitchRaw = v; }
-            });
-          } catch (e) {}
-        }
+        Object.defineProperty(s, 'yaw', {
+          configurable: true,
+          get: function () { return AIMLOCK.locked ? AIMLOCK.targetYaw : this.__pbYawRaw; },
+          set: function (v) { this.__pbYawRaw = +v || 0; }   // SELALU update raw
+        });
+        Object.defineProperty(s, 'pitch', {
+          configurable: true,
+          get: function () { return AIMLOCK.locked ? AIMLOCK.targetPitch : this.__pbPitchRaw; },
+          set: function (v) { this.__pbPitchRaw = +v || 0; } // SELALU update raw
+        });
         s.__pbYawLocked = true;
-        log('yaw/pitch locked on player (PC+Mobile safe)');
+        log('yaw/pitch locked on player');
       } catch (e) { log('lockYawPitch fail', e); }
     }
 
@@ -398,46 +362,17 @@
       else if (!DBG.n) { dbg('iRiLLL MODZ'); }
     }, 1000);
 
-    /* ============================================================
-       GAME GETTER — PC-safe fallback
-       ============================================================ */
-    var __G_cache = null, __G_miss = 0;
     function game() {
       try {
         var g = window.G;
-        if (g && g.P && g.P.s && g.camera && g.bots) { __G_cache = g; __G_miss = 0; return g; }
+        if (g && g.P && g.P.s && g.camera && g.bots) return g;
       } catch (e) {}
-      if (__G_cache) {
-        try {
-          if (__G_cache.P && __G_cache.P.s && __G_cache.camera && __G_cache.bots) return __G_cache;
-        } catch (e) { __G_cache = null; }
-      }
-      if (++__G_miss % 30 === 0) {
-        try {
-          if (window.HUDO && window.HUDO.__G) {
-            var hg = window.HUDO.__G;
-            if (hg && hg.P && hg.P.s && hg.camera && hg.bots) { __G_cache = hg; return hg; }
-          }
-          for (var k in window) {
-            if (k.charAt(0) === '_') continue;
-            try {
-              var cand = window[k];
-              if (!cand || typeof cand !== 'object') continue;
-              if (cand.P && cand.P.s && cand.camera && cand.bots && typeof cand.cast === 'function' && typeof cand.fire === 'function') {
-                __G_cache = cand;
-                try { window.G = cand; } catch (e) {}
-                log('window.G recovered via key:', k);
-                return cand;
-              }
-            } catch (e) {}
-          }
-        } catch (e) {}
-      }
       return null;
     }
     function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
     function wrap(a) { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; }
     function wpos(b, out) { var e = b.matrixWorld.elements; out.x = e[12]; out.y = e[13]; out.z = e[14]; return out; }
+
     var A = { x: 0, y: 0, z: 0 }, B = { x: 0, y: 0, z: 0 };
     var _hpOut = { x: 0, y: 0, z: 0 };
     var _pv = null, _pDir = { x: 0, y: 0, z: 0 };
@@ -446,61 +381,69 @@
        BONE-ACCURATE TARGET POINT
        ============================================================ */
     function headPoint(p) {
-      if (!p || !p.c) return null;
-      var by = p.c.byName; if (!by) return null;
+      var by = p && p.c && p.c.byName; if (!by) return null;
       var h = by.Head || by.head || null;
       var g = by.Bone_HeadGearAttach || null;
-      var validH = h && h.matrixWorld && h.matrixWorld.elements;
-      var validG = g && g.matrixWorld && g.matrixWorld.elements;
-      if (validH) {
-        wpos(h, _hpOut);
-        if (validG) { wpos(g, A); _hpOut.y = (_hpOut.y + A.y) * 0.5 + P.headBias; }
-        else { _hpOut.y += P.headBias; }
-        if (isFinite(_hpOut.x) && isFinite(_hpOut.y) && isFinite(_hpOut.z)) return _hpOut;
+      if (h) {
+        try { wpos(h, _hpOut); } catch (e) { return null; }
+        if (g) {
+          try { wpos(g, A); _hpOut.y = (_hpOut.y + A.y) * 0.5 + P.headBias; }
+          catch (e) { _hpOut.y += P.headBias; }
+        } else { _hpOut.y += P.headBias; }
+        return _hpOut;
       }
-      if (validG) {
-        wpos(g, _hpOut); _hpOut.y -= 0.12 - P.headBias;
-        if (isFinite(_hpOut.x) && isFinite(_hpOut.y) && isFinite(_hpOut.z)) return _hpOut;
+      if (g) {
+        try { wpos(g, _hpOut); } catch (e) { return null; }
+        _hpOut.y -= 0.12 - P.headBias;
+        return _hpOut;
       }
       return null;
     }
     function bodyPoint(p) {
-      var by = p.c && p.c.byName; if (!by) return null;
+      var by = p && p.c && p.c.byName; if (!by) return null;
       var h = by.Spine2 || by.Spine1 || by.Pelvis || by.Neck;
       if (!h) return null;
-      wpos(h, _hpOut); _hpOut.y += P.bodyBias;
+      try { wpos(h, _hpOut); } catch (e) { return null; }
+      _hpOut.y += P.bodyBias;
       return _hpOut;
     }
+
+    /* FIX: pakai obj.position (visual) untuk remote, bukan mover.pos (stale) */
     function headPointLogical(p) {
-      var s = p && p.mover && p.mover.pos; if (!s) return null;
-      var h = p.mover.crouch ? 1.15 : 1.68;
-      if (typeof p.eyeH === 'number' && p.eyeH > 0) h = p.eyeH + (p.mover.crouch ? -0.1 : 0.05);
-      _hpOut.x = s.x;
-      _hpOut.y = s.y + h + P.headBias;
-      _hpOut.z = s.z;
+      var base = (p && p.obj && p.obj.position) ? p.obj.position : (p && p.mover && p.mover.pos);
+      if (!base) return null;
+      _hpOut.x = base.x;
+      _hpOut.y = base.y + (p.mover && p.mover.crouch ? 1.25 : 1.8) + P.headBias;
+      _hpOut.z = base.z;
       return _hpOut;
     }
     function bodyPointLogical(p) {
-      var s = p && p.mover && p.mover.pos; if (!s) return null;
-      _hpOut.x = s.x; _hpOut.y = s.y + (p.mover.crouch ? 0.85 : 1.2) + P.bodyBias; _hpOut.z = s.z;
+      var base = (p && p.obj && p.obj.position) ? p.obj.position : (p && p.mover && p.mover.pos);
+      if (!base) return null;
+      _hpOut.x = base.x;
+      _hpOut.y = base.y + (p.mover && p.mover.crouch ? 0.85 : 1.2) + P.bodyBias;
+      _hpOut.z = base.z;
       return _hpOut;
     }
+
     function getTargetPointLogical(p) {
-      if (P.hitbox === 'head') { var hp = headPoint(p); return hp || headPointLogical(p); }
-      if (P.hitbox === 'body') { var bp = bodyPoint(p); return bp || bodyPointLogical(p); }
-      var hp2 = headPoint(p), bp2 = bodyPoint(p);
-      if (!hp2 && !bp2) return headPointLogical(p);
-      if (!hp2) return bp2;
-      if (!bp2) return hp2;
-      var hx = hp2.x - C.x, hy = hp2.y - C.y, hz = hp2.z - C.z;
-      var hd = Math.sqrt(hx*hx + hy*hy + hz*hz);
-      var bx = bp2.x - C.x, by2 = bp2.y - C.y, bz = bp2.z - C.z;
-      var bd = Math.sqrt(bx*bx + by2*by2 + bz*bz);
-      if (hd < bd) { _hpOut.x = hp2.x; _hpOut.y = hp2.y; _hpOut.z = hp2.z; }
-      else { _hpOut.x = bp2.x; _hpOut.y = bp2.y; _hpOut.z = bp2.z; }
+      var hp = headPoint(p);
+      var bp = bodyPoint(p);
+      if (P.hitbox === 'head')   return hp || headPointLogical(p);
+      if (P.hitbox === 'body')   return bp || bodyPointLogical(p);
+      // nearest: pilih head atau body yang paling dekat ke kamera
+      var hpL = hp || headPointLogical(p);
+      var bpL = bp || bodyPointLogical(p);
+      if (!hpL) return bpL;
+      if (!bpL) return hpL;
+      var dxh = hpL.x - C.x, dyh = hpL.y - C.y, dzh = hpL.z - C.z;
+      var dh = Math.sqrt(dxh*dxh + dyh*dyh + dzh*dzh);
+      var dxb = bpL.x - C.x, dyb = bpL.y - C.y, dzb = bpL.z - C.z;
+      var db = Math.sqrt(dxb*dxb + dyb*dyb + dzb*dzb);
+      if (dh <= db) { _hpOut.x = hpL.x; _hpOut.y = hpL.y; _hpOut.z = hpL.z; }
+      else          { _hpOut.x = bpL.x; _hpOut.y = bpL.y; _hpOut.z = bpL.z; }
       return _hpOut;
     }
-    function getTargetPointVisual(p) { return getTargetPointLogical(p); }
 
     function isInsidePOVCircle(cam, hp) {
       try {
@@ -568,6 +511,24 @@
     var fireIds = new Set();
     function inZone(t) { return t.clientX > innerWidth * 0.50 && t.clientY > innerHeight * 0.45; }
     function syncFire() { fireHeld = fireIds.size; st.fire = fireHeld; }
+
+    /* ============================================================
+       FIX #1 & #2 — FIRE STATE UNTUK MOUSE
+       ============================================================ */
+    addEventListener('mousedown', function (e) {
+      if (e.button === 0) {
+        fireHeld = 1;
+        AB.freshFire = 1;
+        st.fire = 1;
+      }
+    }, true);
+    addEventListener('mouseup', function (e) {
+      if (e.button === 0) {
+        fireHeld = 0;
+        st.fire = 0;
+      }
+    }, true);
+
     addEventListener('touchstart', function (e) {
       for (var i = 0; i < e.changedTouches.length; i++) {
         var t = e.changedTouches[i];
@@ -590,24 +551,11 @@
 
     function tick() {
       requestAnimationFrame(tick);
-      if (!G) {
-        G = game();
-        if (!G) {
-          if (++__G_warn === 60 || __G_warn % 600 === 0) {
-            log('G missing — host=' + location.hostname + ' GAME_READY=' + !!window.GAME_READY + ' HUDO=' + !!window.HUDO);
-          }
-          return;
-        }
-        st.G = true; log('G unlocked', V); try { buzz(30); } catch (e) {}
-      }
-      if (G !== __G_cache) __G_cache = G;
-
+      if (!G) { G = game(); if (!G) return; st.G = true; log('G unlocked', V); try { buzz(30); } catch (e) {} }
       var g = G, self = g.P.s, cam = g.camera;
       if (!self || self.dead) {
         if (holding) up();
-        lastPick = null; st.lock = 0; AB.target = null; AB.freshFire = 0;
-        AIMLOCK.locked = false; AIMLOCK.on = false;
-        if (self && self.__pbYawLocked) { self.__pbYawLocked = false; }
+        lastPick = null; st.lock = 0; AB.target = null; AB.freshFire = 0; AIMLOCK.locked = false;
         return;
       }
 
@@ -615,13 +563,11 @@
 
       var now = performance.now(), m = cam.matrixWorld.elements;
       C.x = m[12]; C.y = m[13]; C.z = m[14];
-      var yaw = +((self.__pbYawRaw != null) ? self.__pbYawRaw : self.yaw) || 0;
-      var pitch = +((self.__pbPitchRaw != null) ? self.__pbPitchRaw : self.pitch) || 0;
+      var yaw = +self.yaw || 0, pitch = +self.pitch || 0;
       var cp = Math.cos(pitch);
       F.x = -Math.sin(yaw) * cp; F.y = Math.sin(pitch); F.z = -Math.cos(yaw) * cp;
 
-      var list = g.bots || [];
-
+      var list = g.bots;
       var best = null, bestP = null, bestA = 1e9, bestD = 1e9, myTeam = self.team, n = 0, en = 0;
       for (var i = 0; i < list.length; i++) {
         var p = list[i];
@@ -664,45 +610,36 @@
 
       if (doAimbot && AB.target) {
         var ap = AB.target.p;
-        var dxA = ap.x - C.x, dyA = ap.y - C.y, dzA = ap.z - C.z;
-        var distA = Math.max(0.001, Math.sqrt(dxA*dxA + dyA*dyA + dzA*dzA));
-        var tYawAb   = Math.atan2(-dxA, -dzA);
-        var tPitchAb = Math.asin(clamp(dyA / distA, -1, 1));
+        var tYawAb   = Math.atan2(-(ap.x - C.x), -(ap.z - C.z));
+        var tPitchAb = Math.asin(clamp((ap.y - C.y) / Math.max(0.001, Math.hypot(ap.x - C.x, ap.y - C.y, ap.z - C.z)), -1, 1));
         while (tYawAb >  Math.PI) tYawAb -= 2 * Math.PI;
         while (tYawAb < -Math.PI) tYawAb += 2 * Math.PI;
-        var rawY = (self.__pbYawRaw != null ? self.__pbYawRaw : +self.yaw) || 0;
-        var rawP = (self.__pbPitchRaw != null ? self.__pbPitchRaw : +self.pitch) || 0;
+        var rawY = self.__pbYawRaw   != null ? self.__pbYawRaw   : (+self.yaw   || 0);
+        var rawP = self.__pbPitchRaw != null ? self.__pbPitchRaw : (+self.pitch || 0);
         var k = Math.min(1, Math.max(0.15, P.aimbotGain * 0.5));
         AIMLOCK.on = true; AIMLOCK.locked = true;
-        AIMLOCK.holdUntil = now + P.aimbotHoldMs;
         AIMLOCK.targetYaw   = rawY + wrap(tYawAb - rawY) * k;
         AIMLOCK.targetPitch = rawP + (tPitchAb - rawP) * k;
-        st.aimbot = 1; st.lock = 1; st.dist = distA;
+        st.aimbot = 1;
       } else {
         st.aimbot = 0;
         if (!best || !aimOn) {
-          if (AIMLOCK.locked && now < AIMLOCK.holdUntil) {
-            st.aimbot = 1;
-          } else {
-            AIMLOCK.locked = false; lastPick = null; st.lock = 0;
-            if (holding) up();
-            aimFlush(g);
-            return;
-          }
-        } else {
-          var dxB = bestP.x - C.x, dyB = bestP.y - C.y, dzB = bestP.z - C.z;
-          var tYaw   = Math.atan2(-dxB, -dzB);
-          var tPitch = Math.asin(clamp(dyB / Math.max(0.001, bestD), -1, 1));
-          while (tYaw >  Math.PI) tYaw -= 2 * Math.PI;
-          while (tYaw < -Math.PI) tYaw += 2 * Math.PI;
-          var rawY2 = (self.__pbYawRaw != null ? self.__pbYawRaw : +self.yaw) || 0;
-          var rawP2 = (self.__pbPitchRaw != null ? self.__pbPitchRaw : +self.pitch) || 0;
-          var kk = Math.min(1, Math.max(0.05, P.gain));
-          AIMLOCK.on = true; AIMLOCK.locked = true;
-          AIMLOCK.targetYaw   = rawY2 + wrap(tYaw - rawY2) * kk;
-          AIMLOCK.targetPitch = rawP2 + (tPitch - rawP2) * kk;
-          st.err = bestA; st.dist = bestD; st.lock = 1; lastPick = best;
+          AIMLOCK.locked = false; lastPick = null; st.lock = 0;
+          if (holding) up();
+          aimFlush(g);
+          return;
         }
+        var tYaw   = Math.atan2(-(bestP.x - C.x), -(bestP.z - C.z));
+        var tPitch = Math.asin(clamp((bestP.y - C.y) / Math.max(0.001, bestD), -1, 1));
+        while (tYaw >  Math.PI) tYaw -= 2 * Math.PI;
+        while (tYaw < -Math.PI) tYaw += 2 * Math.PI;
+        var rawY2 = self.__pbYawRaw   != null ? self.__pbYawRaw   : (+self.yaw   || 0);
+        var rawP2 = self.__pbPitchRaw != null ? self.__pbPitchRaw : (+self.pitch || 0);
+        var kk = Math.min(1, Math.max(0.05, P.gain));
+        AIMLOCK.on = true; AIMLOCK.locked = true;
+        AIMLOCK.targetYaw   = rawY2 + wrap(tYaw   - rawY2) * kk;
+        AIMLOCK.targetPitch = rawP2 + (tPitch - rawP2) * kk;
+        st.err = bestA; st.dist = bestD; st.lock = 1; lastPick = best;
       }
 
       if (!(P.autoFire || fireHeld) || now < nextTap || holding) {
@@ -719,21 +656,8 @@
       }
       var hit = null;
       try { hit = hitTestSafe(fireTarget, C, F, P.reach); } catch (e) { hit = null; }
-      if (!hit) {
-        if (P.aimbotOn) {
-          var hp3 = headPoint(fireTarget) || headPointLogical(fireTarget);
-          if (hp3) {
-            var ddx = hp3.x - C.x, ddy = hp3.y - C.y, ddz = hp3.z - C.z;
-            var dd = Math.sqrt(ddx*ddx + ddy*ddy + ddz*ddz);
-            if (dd > 0.001) {
-              F.x = ddx/dd; F.y = ddy/dd; F.z = ddz/dd;
-              hit = { t: dd, head: true, part: 'head' };
-            }
-          }
-        }
-      }
       if (!hit) { aimFlush(g); return; }
-      if (P.hitbox === 'head' && !hit.head) { aimFlush(g); return; }
+      if (P.hitbox === 'head') { if (!hit.head) { aimFlush(g); return; } }
 
       down(); holding = true;
       var holdMs, gapMs;
@@ -742,7 +666,6 @@
       setTimeout(function () { if (holding) up(); }, holdMs);
       nextTap = now + holdMs + gapMs;
       if (P.aimbotOn) AB.lastShot = now;
-
       aimFlush(g);
     }
 
@@ -750,7 +673,9 @@
 
     function buzz(p) { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} }
     setInterval(function () {
-      try { var Bx = window.PBAndroid, v; if (Bx && Bx.poll) v = Bx.poll();
+      try {
+        var Bx = window.PBAndroid, v;
+        if (Bx && Bx.poll) v = Bx.poll();
         if (v === 1) { aimOn = true; st.aim = true; buzz([20, 40, 20]); }
         else if (v === -1) { aimOn = false; st.aim = false; up(); buzz(60); }
       } catch (e) {}
@@ -785,8 +710,16 @@
       aimbotHold: function (v) { if (typeof v === 'number' && v >= 50) { P.aimbotHoldMs = v; try { localStorage.setItem('ir_aimbot_hold', String(v)); } catch (e) {} } return P.aimbotHoldMs; },
       headBias: function (v) { if (typeof v === 'number') { P.headBias = v; try { localStorage.setItem('ir_head_bias', String(v)); } catch (e) {} } return P.headBias; },
       bodyBias: function (v) { if (typeof v === 'number') { P.bodyBias = v; try { localStorage.setItem('ir_body_bias', String(v)); } catch (e) {} } return P.bodyBias; },
-      list: function () { var g = game(); if (!g) return 'no G'; return (g.bots || []).map(function (p) { return { id: p.id, team: p.team, my: p.team === g.P.s.team, dead: !!p.dead, hp: p.hp, vis: p.obj && p.obj.visible, bot: !!p.isBot, remote: !!p.remote, hasNet: !!p.net }; }); },
-      head: function () { var hp = lastPick && getTargetPointLogical(lastPick); return hp ? { x: +hp.x.toFixed(2), y: +hp.y.toFixed(2), z: +hp.z.toFixed(2), team: lastPick.team, hp: lastPick.hp } : null; },
+      list: function () {
+        var g = game(); if (!g) return 'no G';
+        return (g.bots || []).map(function (p) {
+          return { id: p.id, team: p.team, my: p.team === g.P.s.team, dead: !!p.dead, hp: p.hp, vis: p.obj && p.obj.visible, bot: !!p.isBot, remote: !!p.remote, hasNet: !!p.net };
+        });
+      },
+      head: function () {
+        var hp = lastPick && getTargetPointLogical(lastPick);
+        return hp ? { x: +hp.x.toFixed(2), y: +hp.y.toFixed(2), z: +hp.z.toFixed(2), team: lastPick.team, hp: lastPick.hp } : null;
+      },
       aimAt: function (x, y, z) {
         var g = G || game(); if (!g || !g.P || !g.P.s) return 'no G';
         var cam = g.camera.matrixWorld.elements;
@@ -959,70 +892,14 @@
       ctx.shadowBlur = 0;
     }
 
-    /* ============================================================
-       BOSS PATCH — wallbang + silent aim (merged, anti-double-wrap)
-       ============================================================ */
-    var WB = 200;
-    function wbGun() {
-      try {
-        var g = G || game();
-        if (!g || !g.P) return false;
-        var w = null;
-        try { w = g.P.W; } catch (e) { w = null; }
-        if (!w) return false;
-        return !(w.melee || w.grenade || w.c4);
-      } catch (e) { return false; }
-    }
-    var BOSS_PATCHED = new WeakSet();
-    function bossPatch() {
-      var g = G || game(); var L = g && g.bots; if (!L || !L.length) return;
-      for (var i = 0; i < L.length; i++) {
-        var b = L[i];
-        if (!b || typeof b.hitTest !== 'function') continue;
-        if (BOSS_PATCHED.has(b)) continue;
-        BOSS_PATCHED.add(b);
-        var orig = b.hitTest;
-        b.__pbOrig = orig;
-        b.hitTest = function (o, d, m) {
-          var reach = m;
-          try {
-            if (FL.wallbang && wbGun() && typeof m === 'number' && m < WB) reach = WB;
-          } catch (e) {}
-          try {
-            if (SA.on && wbGun()) {
-              var g2 = G || game();
-              if (g2 && g2.camera && g2.camera.matrixWorld) {
-                var hp = headPoint(this) || headPointLogical(this);
-                if (hp) {
-                  var cam = g2.camera.matrixWorld.elements;
-                  var ox = cam[12], oy = cam[13], oz = cam[14];
-                  var dx = hp.x - ox, dy = hp.y - oy, dz = hp.z - oz;
-                  var len = Math.sqrt(dx*dx + dy*dy + dz*dz);
-                  if (len > 1) {
-                    var no = { x: ox, y: oy, z: oz };
-                    var nd = { x: dx/len, y: dy/len, z: dz/len };
-                    var r = orig.call(this, no, nd, len + 1);
-                    if (r) {
-                      r.head = true;
-                      if (!r.part) r.part = 'head';
-                      return r;
-                    }
-                  }
-                }
-              }
-            }
-          } catch (e) {}
-          try { return orig.call(this, o, d, reach); } catch (e) { return null; }
-        };
-      }
-    }
-    var SA = { on: 0 };
-    function saPatch() { bossPatch(); }
-
     function eFrame() {
       requestAnimationFrame(eFrame);
       var g = G || game();
-      if (g) { try { bossPatch(); } catch (e) {} try { ammoTick(); } catch (e) {} try { dmgTick(); } catch (e) {} }
+      if (g) {
+        try { wbPatch(); } catch (e) {}
+        try { ammoTick(); } catch (e) {}
+        try { dmgTick(); } catch (e) {}
+      }
       if (!E.on) { eClear(); } else {
         var t = performance.now();
         if (t - E.last < 33) {} else {
@@ -1058,6 +935,26 @@
       }
     };
     window.__pbvis = VIS_API; HIDDEN.pbvis = VIS_API;
+
+    var WB = 200;
+    function wbGun() {
+      try { var g = G || game(); var w = g && g.P && g.P.W; return !!(w && !w.melee && !w.grenade && !w.c4); } catch (e) { return false; }
+    }
+    function wbPatch() {
+      if (!FL.wallbang) return;
+      var g = G || game(); var L = g && g.bots; if (!L || !L.length) return;
+      for (var i = 0; i < L.length; i++) {
+        var b = L[i];
+        if (!b || b.__wb || typeof b.hitTest !== 'function') continue;
+        b.__wb = 1;
+        (function (b, f) {
+          b.hitTest = function (o, d, m) {
+            var r = (FL.wallbang && wbGun() && typeof m === 'number') ? WB : m;
+            try { return f.call(this, o, d, r); } catch (e) { return null; }
+          };
+        })(b, b.hitTest);
+      }
+    }
 
     var AM = { at: 0 };
     function ammoTick() {
@@ -1109,7 +1006,10 @@
     function gbTick() {
       requestAnimationFrame(gbTick);
       try {
-        if (!FL.godmode) { if (GB.patched && GB.s && GB.origHT) { try { GB.s.hitTest = GB.origHT; } catch (e) {} GB.patched = 0; } return; }
+        if (!FL.godmode) {
+          if (GB.patched && GB.s && GB.origHT) { try { GB.s.hitTest = GB.origHT; } catch (e) {} GB.patched = 0; }
+          return;
+        }
         var g = G || game(); if (!g || !g.P || !g.P.s) return;
         var s = g.P.s;
         if (s !== GB.s) gbBind(s);
@@ -1384,7 +1284,13 @@
 
     var QC = { on: 1, fast: 0, slot: 0, ammo: -1, gate: {}, invRef: null, n: 0, sw: 0, dead: 0 };
     function qcW(p, slot) { try { var s = p.inv[slot]; return s && s.w ? s.w : null; } catch (e) { return null; } }
-    function qcTap(code) { try { var o = { code: code, key: code, bubbles: true, cancelable: true }; window.dispatchEvent(new KeyboardEvent('keydown', o)); window.dispatchEvent(new KeyboardEvent('keyup', o)); } catch (e) {} }
+    function qcTap(code) {
+      try {
+        var o = { code: code, key: code, bubbles: true, cancelable: true };
+        window.dispatchEvent(new KeyboardEvent('keydown', o));
+        window.dispatchEvent(new KeyboardEvent('keyup', o));
+      } catch (e) {}
+    }
     function qcTick() {
       requestAnimationFrame(qcTick);
       try {
@@ -1413,15 +1319,6 @@
     };
     window.__pbqc = QC_API; HIDDEN.pbqc = QC_API;
 
-    var PR = { on: 0, ms: 120 };
-    function predictPos(bot, ms) {
-      try {
-        var mv = bot && bot.mover; if (!mv || !mv.vel) return null;
-        var e = bot.obj && bot.obj.matrixWorld && bot.obj.matrixWorld.elements; if (!e) return null;
-        var t = (ms || 120) / 1000;
-        return { x: e[12] + mv.vel.x*t, y: e[13] + mv.vel.y*t*0.35, z: e[14] + mv.vel.z*t };
-      } catch (err) { return null; }
-    }
     var RF = { on: 0 };
     function rfTick() {
       requestAnimationFrame(rfTick);
@@ -1503,6 +1400,95 @@
     }
     try { requestAnimationFrame(tbTick); } catch (e) {}
 
+    /* ============================================================
+       SILENT AIM — FIX #4 & #5
+       FIX: pakai THREE.Vector3 (bukan plain object)
+       FIX: berlaku ke SEMUA arah tembakan (tidak hanya saat wbGun)
+       FIX: hitTest menembus ke target walau crosshair tidak tepat
+       ============================================================ */
+    var SA = { on: 0 };
+
+    function getTHREE() {
+      // cari objek THREE dari berbagai sumber
+      if (window.THREE && window.THREE.Vector3) return window.THREE;
+      try {
+        var g = G || game();
+        if (g && g.camera && g.camera.position && g.camera.position.constructor) {
+          var V3 = g.camera.position.constructor;
+          if (V3 && V3.prototype && V3.prototype.project) {
+            return { Vector3: V3 };
+          }
+        }
+      } catch (e) {}
+      return null;
+    }
+
+    function saPatch() {
+      var g = G || game();
+      var L = g && g.bots;
+      if (!L || !L.length) return;
+      var THREE = getTHREE();
+      if (!THREE || !THREE.Vector3) {
+        // fallback: clone camera.position supaya tipenya Vector3 asli
+        if (!SA._tmpO) {
+          try {
+            var g2 = G || game();
+            if (g2 && g2.camera && g2.camera.position) {
+              SA._tmpO = g2.camera.position.clone();
+              SA._tmpD = g2.camera.position.clone();
+            }
+          } catch (e) {}
+        }
+      }
+      for (var i = 0; i < L.length; i++) {
+        var b = L[i];
+        if (!b || b.__sa || typeof b.hitTest !== 'function') continue;
+        b.__sa = 1;
+        (function (b, f) {
+          b.hitTest = function (o, d, m) {
+            if (!SA.on) return f.call(this, o, d, m);
+            try {
+              var g2 = G || game();
+              if (!g2 || !g2.P || !g2.P.s) return f.call(this, o, d, m);
+              if (this.dead || !(this.hp > 0)) return f.call(this, o, d, m);
+              if (this.team === g2.P.s.team) return f.call(this, o, d, m);
+
+              var hp = headPoint(this);
+              if (!hp) {
+                var bp = bodyPoint(this);
+                if (!bp) hp = headPointLogical(this);
+                else hp = bp;
+              }
+              if (!hp) return f.call(this, o, d, m);
+
+              var cam = g2.camera;
+              var me = cam.matrixWorld.elements;
+              var ox = me[12], oy = me[13], oz = me[14];
+              var dx = hp.x - ox, dy = hp.y - oy, dz = hp.z - oz;
+              var len = Math.sqrt(dx*dx + dy*dy + dz*dz);
+              if (len < 1) return f.call(this, o, d, m);
+
+              // KUNCI: pakai Vector3 asli dari THREE, bukan plain object
+              var no, nd;
+              if (THREE && THREE.Vector3) {
+                no = new THREE.Vector3(ox, oy, oz);
+                nd = new THREE.Vector3(dx/len, dy/len, dz/len);
+              } else if (SA._tmpO && SA._tmpD) {
+                no = SA._tmpO.set(ox, oy, oz);
+                nd = SA._tmpD.set(dx/len, dy/len, dz/len);
+              } else {
+                return f.call(this, o, d, m);
+              }
+
+              // tembak ke kepala target walau crosshair jauh
+              var r = f.call(this, no, nd, len + 1);
+              return r;
+            } catch (e) { return f.call(this, o, d, m); }
+          };
+        })(b, b.hitTest);
+      }
+    }
+
     var IR = { on: 0, at: 0 };
     function irTick() {
       requestAnimationFrame(irTick);
@@ -1546,7 +1532,11 @@
         var rx = dx*ca - dz*sa, rz = dx*sa + dz*ca;
         var cx = 60 + (rx/range)*55, cz = 60 + (rz/range)*55;
         var dot = RD.dots[idx];
-        if (!dot) { dot = document.createElement('div'); dot.style.cssText = 'position:absolute;width:5px;height:5px;margin:-2.5px 0 0 -2.5px;border-radius:50%;background:#ef4444'; RD.el.appendChild(dot); RD.dots[idx] = dot; }
+        if (!dot) {
+          dot = document.createElement('div');
+          dot.style.cssText = 'position:absolute;width:5px;height:5px;margin:-2.5px 0 0 -2.5px;border-radius:50%;background:#ef4444';
+          RD.el.appendChild(dot); RD.dots[idx] = dot;
+        }
         dot.style.display = 'block';
         dot.style.left = cx.toFixed(1) + 'px';
         dot.style.top = cz.toFixed(1) + 'px';
@@ -1612,7 +1602,17 @@
     naTarget = function (g, off) {
       var t = _naTarget(g, off);
       if (!t || !SL.on || !t.bot) return t;
-      var pp = predictPos(t.bot, 300);
+      var pp = null;
+      try {
+        var mv = t.bot.mover;
+        if (mv && mv.vel) {
+          var e = t.bot.obj && t.bot.obj.matrixWorld && t.bot.obj.matrixWorld.elements;
+          if (e) {
+            var tsec = 300 / 1000;
+            pp = { x: e[12] + mv.vel.x * tsec, y: e[13] + mv.vel.y * tsec * 0.35, z: e[14] + mv.vel.z * tsec };
+          }
+        }
+      } catch (e) {}
       if (pp) { t.x = pp.x; t.z = pp.z; }
       return t;
     };
@@ -1688,23 +1688,14 @@
       fastReload: function (on) { FR.on = on ? 1 : 0; return FR.on; },
       instScope: function (on) { IS.on = on ? 1 : 0; return IS.on; },
       trig: function (on) { TB.on = on ? 1 : 0; return TB.on; },
-      silent: function (on) {
-        SA.on = on ? 1 : 0;
-        bossPatch();
-        try {
-          var g = G || game();
-          var n = g && g.bots ? g.bots.filter(function (b) { return BOSS_PATCHED.has(b); }).length : 0;
-          log('silent =', SA.on, '· bot patched =', n + '/' + (g && g.bots ? g.bots.length : 0));
-        } catch (e) {}
-        return SA.on;
-      },
+      silent: function (on) { SA.on = on ? 1 : 0; saPatch(); return SA.on; },
       lob: function (on) { SL.on = on ? 1 : 0; return SL.on; },
       respawn: function (on) { IR.on = on ? 1 : 0; return IR.on; },
       radar: function (on) { RD.on = on ? 1 : 0; if (!on && RD.el) RD.el.style.display = 'none'; return RD.on; },
       hpo: function (on) { HPO.on = on ? 1 : 0; return HPO.on; },
       fovc: function (on) { FC.on = on ? 1 : 0; return FC.on; },
       tracer: function (on) { TR.on = on ? 1 : 0; if (!on) trClear(); return TR.on; },
-      wallbang: function (on) { FL.wallbang = on ? 1 : 0; bossPatch(); return FL.wallbang; },
+      wallbang: function (on) { FL.wallbang = on ? 1 : 0; return FL.wallbang; },
       infAmmo: function (on) { FL.infAmmo = on ? 1 : 0; return FL.infAmmo; },
       noRecoil: function (on) { FL.noRecoil = on ? 1 : 0; return FL.noRecoil; },
       godmode: function (on) { FL.godmode = on ? 1 : 0; return FL.godmode; },
@@ -1725,11 +1716,15 @@
     };
     window.__pbx = PBX_API; HIDDEN.pbx = PBX_API;
 
+    // PR dideklarasikan setelah PBX_API dipakai, pindahkan deklarasi ke atas
+    // (fix hoisting: PR/RF sudah dideklarasikan sebelum PBX_API)
+    var PR = { on: 0, ms: 120 };
+
     (function pbxFrame() {
       requestAnimationFrame(pbxFrame);
       try {
         var g = G || game(); if (!g) return;
-        if (SA.on || FL.wallbang) bossPatch();
+        if (SA.on) saPatch();
         if (RD.on) rdDraw(g);
         if (TR.on) trDraw(g);
       } catch (e) {}
@@ -1738,7 +1733,11 @@
     (function hideAPIs() {
       try {
         ['__pb', '__pbvis', '__pbnade', '__pbqc', '__pbx'].forEach(function (k) {
-          try { var v = window[k]; if (!v) return; Object.defineProperty(window, k, { configurable: false, enumerable: false, get: function () { return v; } }); } catch (e) {}
+          try {
+            var v = window[k];
+            if (!v) return;
+            Object.defineProperty(window, k, { configurable: false, enumerable: false, get: function () { return v; } });
+          } catch (e) {}
         });
       } catch (e) {}
     })();
@@ -1746,8 +1745,12 @@
     log(BRAND, V, 'up');
     requestAnimationFrame(tick);
 
-    var __gCheck = setInterval(function () { if (window.G) { log('window.G exposed ✓'); clearInterval(__gCheck); } }, 1000);
-    setTimeout(function () { if (!window.G) log('window.G missing — gate patch may have failed'); }, 15000);
+    var __gCheck = setInterval(function () {
+      if (window.G) { log('window.G exposed ✓'); clearInterval(__gCheck); }
+    }, 1000);
+    setTimeout(function () {
+      if (!window.G) log('window.G missing — gate patch may have failed');
+    }, 15000);
 
     /* ============================================================
        UI PANEL
@@ -1970,6 +1973,7 @@
         try { localStorage.setItem(TAB_KEY, key); } catch (e) {}
       }
 
+      /* AIM */
       var pAim = addTab('aim', 'AIM');
       pAim.appendChild(sec('fa-crosshairs', 'Mode Aim Lock'));
       pAim.appendChild(el('div', 'fk-hint', 'Aim lock legacy: lock musuh di mana saja. Pakai Direct State Write (anti isTrusted).'));
@@ -1999,6 +2003,7 @@
       var invertT = toggle(!!O.invert, function (on) { O.invert = on; });
       pAim.appendChild(row('Invert Y', invertT.node, 'Balik arah vertikal'));
 
+      /* AIMBOT */
       var pAb = addTab('aimbot', 'AIMBOT');
       pAb.appendChild(sec('fa-bullseye', 'Aimbot (snap saat fire)'));
       pAb.appendChild(el('div', 'fk-hint', 'Kamera tidak lock sebelum tembak. Snap saat fire. Hanya musuh di dalam POV circle.'));
@@ -2022,6 +2027,7 @@
       povCircleS.label.textContent = 'Circle size';
       pAb.appendChild(povCircleS.node);
 
+      /* ESP */
       var pVis = addTab('vis', 'ESP');
       pVis.appendChild(sec('fa-layer-group', 'Overlay'));
       var espT = toggle(!!(window.__pbvis && window.__pbvis.is()), function (on) { if (on) window.__pbvis.on(); else window.__pbvis.off(); });
@@ -2041,6 +2047,7 @@
       var dmgS = slider(1.0, 3.0, 0.05, 1.3, function (v) { return 'x' + v.toFixed(2); }, function (v) { if (window.__pbvis) window.__pbvis.dmg(v); });
       dmgS.label.textContent = 'Damage'; pVis.appendChild(dmgS.node);
 
+      /* GACOR */
       var pGac = addTab('gacor', 'GACOR');
       pGac.appendChild(sec('fa-bullseye', 'Aim Enhancement'));
       var predT = toggle(!!PR.on, function (on) { window.__pbx.pred(on, PR.ms); });
@@ -2070,6 +2077,7 @@
       var nrecT = toggle(!!FL.noRecoil, function (on) { window.__pbx.noRecoil(on); });
       pGac.appendChild(rowRisk('No recoil', nrecT.node, 'Recoil nol'));
 
+      /* MISC */
       var pMisc = addTab('misc', 'MISC');
       pMisc.appendChild(sec('fa-right-left', 'Quick Swap'));
       var qcT = toggle(!!(window.__pbqc && window.__pbqc.st().on), function (on) { if (on) window.__pbqc.on(); else window.__pbqc.off(); });
@@ -2096,6 +2104,7 @@
       var akT = toggle(!!FL.antiKick, function (on) { window.__pbx.antiKick(on); });
       pMisc.appendChild(rowRisk('Anti-kick', akT.node, 'Blokir kick/ban'));
 
+      /* INFO */
       var pInfo = addTab('info', 'INFO');
       pInfo.appendChild(sec('fa-signal', 'Status'));
       var foot = el('div', 'fk-foot', '');
@@ -2105,7 +2114,7 @@
       pInfo.appendChild(sec('fa-key', 'Bypass'));
       var bypassInfo = el('div', null, '');
       bypassInfo.style.cssText = 'font-size:9px;line-height:1.4;color:#a0aab5';
-      bypassInfo.innerHTML = '<div>L1 preboot · flex gate (PC-safe)</div><div>L1b integrity check bypass</div><div>L2 hide · L3 self-heal · L4 fp-rotate</div><div>L5 direct-state-write · L6 bone-accurate</div><div>L7 merged silent+wallbang</div>';
+      bypassInfo.innerHTML = '<div>L1 preboot · flex gate</div><div>L1b integrity check bypass</div><div>L2 hide · L3 self-heal · L4 fp-rotate</div><div>L5 direct-state-write · L6 bone-accurate</div><div>V2.9: fire state & silent aim fix</div>';
       pInfo.appendChild(bypassInfo);
       pInfo.appendChild(sec('fa-triangle-exclamation', 'Danger'));
       var resetBtn = el('div', 'fk-btn danger');
@@ -2179,6 +2188,7 @@
       }
       setInterval(syncAll, 1000);
 
+      /* DRAG */
       (function () {
         var dragging = false, ox = 0, oy = 0;
         head.addEventListener('mousedown', function (e) {
@@ -2186,7 +2196,7 @@
           dragging = true;
           var r = panel.getBoundingClientRect();
           ox = e.clientX - r.left; oy = e.clientY - r.top;
-        }, { passive: true });
+        });
         addEventListener('mousemove', function (e) {
           if (!dragging) return;
           var x = e.clientX - ox, y = e.clientY - oy;
