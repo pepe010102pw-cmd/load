@@ -1,11 +1,15 @@
 /* ============================================================
-   iRiLLL MODZ — LOGIC ONLY
+   iRiLLL MODZ — LOGIC.JS
    version: 2.8.2  (integrity bypass + bone-accurate aim)
+   License: LOCAL KEYLIST (offline, no pastefy)
    ============================================================ */
 (function () {
   'use strict';
   if (window.__pb) return;
 
+  /* ============================================================
+     LICENSE GATE — LOCAL KEYLIST
+     ============================================================ */
   var PF_KEY_LS    = 'iril_pf_key';
   var PF_TOKEN_LS  = 'iril_pf_token';
   var PF_EXP_LS    = 'iril_pf_exp';
@@ -128,6 +132,9 @@
     var BRAND = 'iRiLLL MODZ';
     function log() { try { console.log.apply(console, ['[iR]'].concat([].slice.call(arguments))); } catch (e) {} }
 
+    /* ============================================================
+       L1 PREBOOT — integrity bypass + flex gate
+       ============================================================ */
     (function preboot() {
       try {
         if (!/\/jogo|game\.html/.test(location.pathname)) return;
@@ -322,8 +329,28 @@
           });
         }
         s.__pbYawLocked = true;
+        log('yaw/pitch locked on player');
+      } catch (e) { log('lockYawPitch fail', e); }
+    }
+     
+    var DBG = { el: null, n: 0 };
+    function dbg(t) {
+      try {
+        if (!DBG.el) {
+          var d = document.createElement('div');
+          d.setAttribute('data-pb', '1');
+          d.style.cssText = 'position:fixed;left:6px;bottom:6px;padding:2px 6px;background:#000a;color:#fff;font:11px monospace;z-index:2147483000;pointer-events:none;border-radius:2px';
+          (document.body || document.documentElement).appendChild(d);
+          DBG.el = d;
+        }
+        DBG.el.textContent = t;
       } catch (e) {}
     }
+    setInterval(function () {
+      if (DBG.n > 3) return;
+      if (game()) { dbg('iRiLLL MODZ'); if (++DBG.n > 3) { try { DBG.el.remove(); } catch (e) {} DBG.el = null; } }
+      else if (!DBG.n) { dbg('iRiLLL MODZ'); }
+    }, 1000);
 
     function game() {
       try {
@@ -339,6 +366,9 @@
     var _hpOut = { x: 0, y: 0, z: 0 };
     var _pv = null, _pDir = { x: 0, y: 0, z: 0 };
 
+    /* ============================================================
+       BONE-ACCURATE TARGET POINT
+       ============================================================ */
     function headPoint(p) {
       var by = p.c && p.c.byName; if (!by) return null;
       var h = by.Head || by.head || null;
@@ -641,7 +671,8 @@
       unlock: function () { AIMLOCK.locked = false; return 'unlocked'; }
     };
     window.__pb = PB_API; HIDDEN.pb = PB_API;
-
+     
+    /* ====== ESP ====== */
     var E = { on: 1, wrap: null, host: null, hostAt: 0, slots: [], last: 0, n: 0 };
     function eInit() {
       if (E.wrap && E.wrap.parentNode) return true;
@@ -721,6 +752,7 @@
       E.n = idx;
     }
 
+    /* ====== BONE ESP ====== */
     var BE = { on: 0, wrap: null, host: null, hostAt: 0, last: 0, range: 60 };
     var BONE_PAIRS = [
       ['Head','Neck'],['Neck','Spine3'],['Spine3','Spine2'],['Spine2','Spine1'],['Spine1','Pelvis'],
@@ -1566,6 +1598,491 @@
 
     var __gCheck = setInterval(function () { if (window.G) { log('window.G exposed ✓'); clearInterval(__gCheck); } }, 1000);
     setTimeout(function () { if (!window.G) log('window.G missing — gate patch may have failed'); }, 15000);
+    
+    /* ============================================================
+       UI PANEL
+       ============================================================ */
+    (function pbUI() {
+      if (window.__pbUI) return;
+      window.__pbUI = 1;
+
+      (function ensureFA() {
+        try {
+          if (document.querySelector('link[data-fa]')) return;
+          var l = document.createElement('link');
+          l.rel = 'stylesheet';
+          l.setAttribute('data-fa', '1');
+          l.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css';
+          (document.head || document.documentElement).appendChild(l);
+        } catch (e) {}
+      })();
+
+      var css = [
+        '.fk{position:fixed;top:8px;right:8px;z-index:2147483600;font:12px/1.3 system-ui,Tahoma,sans-serif;color:#1f2937;',
+        '  background:#fff;border:1px solid #e8ecf0;border-radius:10px;',
+        '  box-shadow:0 3px 14px rgba(0,0,0,.08);pointer-events:auto;user-select:none;overflow:hidden;transition:width .15s,height .15s}',
+        '.fk.hide{display:none}',
+        '.fk.expanded{display:flex;flex-direction:row}',
+        '.fk.expanded .fk-rail{display:flex;flex-direction:column;background:#fafbfc;border-right:1px solid #eef1f4;',
+        '  width:46px;padding:5px 0;gap:2px;flex:0 0 46px;order:0}',
+        '.fk.expanded .fk-body-col{order:1;width:290px;display:flex;flex-direction:column;min-width:0}',
+        '.fk.expanded .fk-tabbar{display:none}',
+        '.fk.collapsed{width:auto}',
+        '.fk.collapsed .fk-rail{display:none}',
+        '.fk.collapsed .fk-body-col{display:none}',
+        '.fk.collapsed .fk-tabbar{display:flex;align-items:center;gap:6px;padding:5px 9px;background:#fafbfc;border-radius:10px}',
+        '.fk.collapsed .fk-tb-title{font:800 11px/1 system-ui,Tahoma,sans-serif;color:#0f172a;letter-spacing:.5px;white-space:nowrap}',
+        '.fk.collapsed .fk-tb-title .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#7c3aed;margin-right:5px;vertical-align:middle}',
+        '.fk-tabbar .fk-tb-open{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;',
+        '  justify-content:center;font-size:12px;color:#fff;cursor:pointer;background:#7c3aed;font-weight:900;flex:0 0 22px;line-height:1}',
+        '.fk-tabbar .fk-tb-open:hover{background:#6d28d9}',
+        '.fk-rail .fk-rail-btn{width:42px;height:42px;margin:0 auto;border-radius:6px;display:flex;flex-direction:column;',
+        '  align-items:center;justify-content:center;gap:1px;color:#8892a0;cursor:pointer;transition:all .12s}',
+        '.fk-rail .fk-rail-btn i{font-size:12px;line-height:1}',
+        '.fk-rail .fk-rail-btn span{font-size:7px;font-weight:800;letter-spacing:.2px;line-height:1}',
+        '.fk-rail .fk-rail-btn:hover{background:#f0f2f5;color:#7c3aed}',
+        '.fk-rail .fk-rail-btn.on{background:#7c3aed;color:#fff}',
+        '.fk-h{display:flex;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid #eef1f4;',
+        '  background:#fafbfc;font-weight:700;cursor:move}',
+        '.fk-h .dot{width:7px;height:7px;border-radius:50%;background:#7c3aed;flex:0 0 7px}',
+        '.fk-h .title{font-size:12px;color:#0f172a;letter-spacing:.4px}',
+        '.fk-h .v{opacity:.7;font-weight:400;font-size:9px;margin-left:auto;color:#8892a0}',
+        '.fk-toggle{cursor:pointer;margin-left:4px;color:#fff;border-radius:4px;',
+        '  width:20px;height:20px;display:flex;align-items:center;justify-content:center;flex:0 0 20px;font-size:10px;background:#7c3aed}',
+        '.fk-toggle:hover{background:#6d28d9}',
+        '.fk-body{padding:6px 9px 9px;max-height:60vh;overflow:auto;background:#fff}',
+        '.fk-body::-webkit-scrollbar{width:3px}',
+        '.fk-body::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:2px}',
+        '.fk-page{display:none}',
+        '.fk-page.on{display:block}',
+        '.fk-sec{margin:8px 0 4px;font-size:9px;letter-spacing:1px;color:#7c3aed;text-transform:uppercase;opacity:.9;font-weight:800;display:flex;align-items:center;gap:4px}',
+        '.fk-sec:first-child{margin-top:0}',
+        '.fk-sec i{font-size:10px}',
+        '.fk-row{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:3px 0}',
+        '.fk-row label{flex:1;color:#334155;font-size:11px;line-height:1.25}',
+        '.fk-row small{display:block;color:#a0aab5;font-size:9px;line-height:1.15;margin-top:1px}',
+        '.fk-row .risk-badge{display:inline-block;padding:0 3px;margin-left:3px;border-radius:2px;font-size:7px;',
+        '  background:#f59e0b;color:#fff;font-weight:900;vertical-align:middle;letter-spacing:.2px;line-height:9px}',
+        '.fk-sw{position:relative;width:32px;height:17px;flex:0 0 32px;border-radius:9px;background:#d4dae1;transition:background .15s;cursor:pointer}',
+        '.fk-sw::after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.15);transition:transform .15s}',
+        '.fk-sw.on{background:#7c3aed}',
+        '.fk-sw.on::after{transform:translateX(15px)}',
+        '.fk-slider{display:flex;align-items:center;gap:6px;padding:2px 0}',
+        '.fk-slider label{flex:0 0 80px;font-size:10px;color:#334155}',
+        '.fk-slider input[type=range]{flex:1;height:2px;-webkit-appearance:none;background:#d4dae1;border-radius:2px;outline:none}',
+        '.fk-slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:#7c3aed;cursor:pointer}',
+        '.fk-slider .n{flex:0 0 42px;text-align:right;font-size:9px;color:#7c3aed;font-variant-numeric:tabular-nums;font-weight:700}',
+        '.fk-select{width:100%;box-sizing:border-box;padding:4px 7px;border:1px solid #cbd5e1;border-radius:5px;font:11px system-ui,sans-serif;outline:none;background:#fff;color:#334155;cursor:pointer;margin-top:2px}',
+        '.fk-select:focus{border-color:#7c3aed}',
+        '.fk-btns{display:flex;gap:5px;margin-top:5px}',
+        '.fk-btn{flex:1;padding:5px 0;text-align:center;border-radius:5px;background:#f1f5f9;border:1px solid #d4dae1;',
+        '  color:#334155;cursor:pointer;font-size:10px;transition:background .15s;display:flex;align-items:center;justify-content:center;gap:4px}',
+        '.fk-btn:hover{background:#e2e8f0}',
+        '.fk-btn:active{background:#7c3aed;color:#fff}',
+        '.fk-btn.on{background:#7c3aed;border-color:#7c3aed;color:#fff}',
+        '.fk-btn.danger{border-color:#fca5a5;background:#fef2f2;color:#b91c1c}',
+        '.fk-btn.danger:hover{background:#fee2e2}',
+        '.fk-foot{margin-top:6px;padding-top:5px;border-top:1px solid #eef1f4;font-size:9px;color:#8892a0;font-variant-numeric:tabular-nums}',
+        '.fk-warn{margin-top:5px;padding:4px 6px;border-radius:5px;background:#fffbeb;border:1px solid #fcd34d;',
+        '  color:#92400e;font-size:9px;line-height:1.25}',
+        '.fk-hint{font-size:9px;color:#a0aab5;line-height:1.25;padding:2px 0 3px}'
+      ].join('');
+
+      var style = document.createElement('style');
+      style.setAttribute('data-pb', '1');
+      style.textContent = css;
+      (document.head || document.documentElement).appendChild(style);
+
+      function el(tag, cls, txt) {
+        var e = document.createElement(tag);
+        if (cls) e.className = cls;
+        if (txt != null) e.textContent = txt;
+        return e;
+      }
+      function toggle(initial, onChange) {
+        var sw = el('div', 'fk-sw' + (initial ? ' on' : ''));
+        var state = !!initial;
+        sw.addEventListener('click', function () {
+          state = !state; sw.classList.toggle('on', state);
+          try { onChange(state); } catch (e) {}
+          refreshFoot();
+        });
+        return { node: sw, get: function () { return state; }, set: function (v) { state = !!v; sw.classList.toggle('on', state); } };
+      }
+      function slider(min, max, step, val, fmt, onChange) {
+        var wrap = el('div', 'fk-slider');
+        var lb = el('label', null, '');
+        var inp = document.createElement('input');
+        inp.type = 'range'; inp.min = min; inp.max = max; inp.step = step; inp.value = val;
+        var num = el('div', 'n', fmt(val));
+        wrap.appendChild(lb); wrap.appendChild(inp); wrap.appendChild(num);
+        inp.addEventListener('input', function () {
+          var v = parseFloat(inp.value);
+          num.textContent = fmt(v);
+          try { onChange(v); } catch (e) {}
+        });
+        return { node: wrap, label: lb, input: inp, set: function (v) { inp.value = v; num.textContent = fmt(v); } };
+      }
+      function row(label, node, smallTxt) {
+        var r = el('div', 'fk-row');
+        var lb = el('label', null, label);
+        if (smallTxt) lb.appendChild(el('small', null, smallTxt));
+        r.appendChild(lb); r.appendChild(node);
+        return r;
+      }
+      function rowRisk(label, node, smallTxt) {
+        var r = el('div', 'fk-row');
+        var lb = el('label', null, label);
+        lb.appendChild(el('span', 'risk-badge', 'RISK'));
+        if (smallTxt) lb.appendChild(el('small', null, smallTxt));
+        r.appendChild(lb); r.appendChild(node);
+        return r;
+      }
+      function sec(icon, text) {
+        var s = el('div', 'fk-sec');
+        s.innerHTML = '<i class="fa-solid ' + icon + '"></i> ' + text;
+        return s;
+      }
+
+      var panel = el('div', 'fk expanded');
+      panel.setAttribute('data-pb', '1');
+
+      var rail = el('div', 'fk-rail');
+      var bodyCol = el('div', 'fk-body-col');
+      var head = el('div', 'fk-h');
+      head.appendChild(el('div', 'dot'));
+      head.appendChild(el('div', 'title', 'iRiLLL MODZ'));
+      head.appendChild(el('div', 'v', 'V' + V));
+      var toggleBtn = el('div', 'fk-toggle');
+      toggleBtn.innerHTML = '<i class="fa-solid fa-minus"></i>';
+      toggleBtn.title = 'Minimize';
+      head.appendChild(toggleBtn);
+      var body = el('div', 'fk-body');
+      bodyCol.appendChild(head);
+      bodyCol.appendChild(body);
+
+      var tabbar = el('div', 'fk-tabbar');
+      var tbTitle = el('div', 'fk-tb-title');
+      tbTitle.innerHTML = '<span class="dot"></span>iRiLLL MODZ';
+      tabbar.appendChild(tbTitle);
+      var tbOpen = el('div', 'fk-tb-open', '+');
+      tbOpen.title = 'Buka menu';
+      tbOpen.addEventListener('click', function (e) { e.stopPropagation(); setCollapsed(false); });
+      tbOpen.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+      tbOpen.addEventListener('touchstart', function (e) { e.stopPropagation(); }, { passive: true });
+      tabbar.appendChild(tbOpen);
+
+      panel.appendChild(rail);
+      panel.appendChild(bodyCol);
+      panel.appendChild(tabbar);
+
+      var TAB_META = {
+        aim:    { icon: 'fa-crosshairs',  label: 'AIM',    title: 'Aim Lock (legacy)' },
+        aimbot: { icon: 'fa-bullseye',    label: 'AIMBOT', title: 'Aimbot (snap saat fire, POV circle)' },
+        vis:    { icon: 'fa-eye',         label: 'ESP',    title: 'Visual ESP' },
+        gacor:  { icon: 'fa-bolt',        label: 'GACOR',  title: 'Advanced' },
+        misc:   { icon: 'fa-sliders',     label: 'MISC',   title: 'Misc' },
+        info:   { icon: 'fa-circle-info', label: 'INFO',   title: 'Info' }
+      };
+
+      function setCollapsed(collapsed) {
+        panel.classList.toggle('collapsed', collapsed);
+        panel.classList.toggle('expanded', !collapsed);
+        try { localStorage.setItem('ir_collapsed', collapsed ? '1' : '0'); } catch (e) {}
+      }
+      toggleBtn.addEventListener('click', function (e) { e.stopPropagation(); setCollapsed(true); });
+      toggleBtn.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+      toggleBtn.addEventListener('touchstart', function (e) { e.stopPropagation(); }, { passive: true });
+
+      var TAB_KEY = 'ir_ui_tab';
+      var tabsRail = {}, pages = {}, order = [];
+
+      function addTab(key, label) {
+        var meta = TAB_META[key] || { icon: 'fa-circle', label: label, title: label };
+        var tR = el('div', 'fk-rail-btn');
+        tR.innerHTML = '<i class="fa-solid ' + meta.icon + '"></i><span>' + meta.label + '</span>';
+        tR.title = meta.title;
+        tR.addEventListener('click', function () { selectTab(key); });
+        rail.appendChild(tR);
+        tabsRail[key] = tR;
+
+        var p = el('div', 'fk-page');
+        body.appendChild(p);
+        pages[key] = p;
+        order.push(key);
+        return p;
+      }
+      function selectTab(key) {
+        order.forEach(function (k) {
+          tabsRail[k].classList.toggle('on', k === key);
+          pages[k].classList.toggle('on', k === key);
+        });
+        try { localStorage.setItem(TAB_KEY, key); } catch (e) {}
+      }
+
+      /* AIM */
+      var pAim = addTab('aim', 'AIM');
+      pAim.appendChild(sec('fa-crosshairs', 'Mode Aim Lock'));
+      pAim.appendChild(el('div', 'fk-hint', 'Aim lock legacy: lock musuh di mana saja. Pakai Direct State Write (anti isTrusted).'));
+
+      pAim.appendChild(sec('fa-bullseye', 'Titik Tembak'));
+      var hitboxSelect = el('select', 'fk-select');
+      hitboxSelect.innerHTML = '<option value="head">Head — kepala</option><option value="body">Body — badan</option><option value="nearest">Nearest — dekat crosshair</option>';
+      hitboxSelect.value = P.hitbox;
+      hitboxSelect.addEventListener('change', function () { window.__pb.hitbox(this.value); });
+      pAim.appendChild(hitboxSelect);
+
+      var headBiasS = slider(-0.3, 0.3, 0.01, P.headBias,
+        function (v) { return (v >= 0 ? '+' : '') + v.toFixed(2) + 'm'; },
+        function (v) { window.__pb.headBias(v); });
+      headBiasS.label.textContent = 'Head offset'; pAim.appendChild(headBiasS.node);
+      var bodyBiasS = slider(-0.3, 0.3, 0.01, P.bodyBias,
+        function (v) { return (v >= 0 ? '+' : '') + v.toFixed(2) + 'm'; },
+        function (v) { window.__pb.bodyBias(v); });
+      bodyBiasS.label.textContent = 'Body offset'; pAim.appendChild(bodyBiasS.node);
+      pAim.appendChild(el('div', 'fk-hint', 'Kalau aim masih meleset, geser Head offset (- turun, + naik).'));
+
+      pAim.appendChild(sec('fa-lock', 'Aim Lock'));
+      var aimT = toggle(!!(window.__pb && window.__pb.state().aim), function (on) { if (on) window.__pb.on(); else window.__pb.off(); });
+      pAim.appendChild(row('Aim lock', aimT.node, 'Auto-lock (legacy)'));
+      var autoFireT = toggle(!!P.autoFire, function (on) { P.autoFire = on ? 1 : 0; });
+      pAim.appendChild(row('Auto fire', autoFireT.node, 'Tembak otomatis saat lock'));
+      var invertT = toggle(!!O.invert, function (on) { O.invert = on; });
+      pAim.appendChild(row('Invert Y', invertT.node, 'Balik arah vertikal'));
+
+      /* AIMBOT */
+      var pAb = addTab('aimbot', 'AIMBOT');
+      pAb.appendChild(sec('fa-bullseye', 'Aimbot (snap saat fire)'));
+      pAb.appendChild(el('div', 'fk-hint', 'Kamera tidak lock sebelum tembak. Snap saat fire. Hanya musuh di dalam POV circle.'));
+      var aimbotT = toggle(!!P.aimbotOn, function (on) { window.__pb.aimbot(on); });
+      pAb.appendChild(rowRisk('Enable aimbot', aimbotT.node, 'Snap saat fire'));
+      var abGainS = slider(0.5, 3.0, 0.05, P.aimbotGain,
+        function (v) { return 'x' + v.toFixed(2); },
+        function (v) { window.__pb.aimbotGain(v); });
+      abGainS.label.textContent = 'Snap speed'; pAb.appendChild(abGainS.node);
+      var abHoldS = slider(50, 800, 10, P.aimbotHoldMs,
+        function (v) { return v.toFixed(0) + 'ms'; },
+        function (v) { window.__pb.aimbotHold(v); });
+      abHoldS.label.textContent = 'Lock duration'; pAb.appendChild(abHoldS.node);
+
+      pAb.appendChild(sec('fa-circle-notch', 'POV Circle'));
+      var fcT = toggle(!!FC.on, function (on) { window.__pbx.fovc(on); });
+      pAb.appendChild(row('Show circle', fcT.node, 'Ring visual'));
+      var povCircleS = slider(1, 1500, 1, P.povCircleR,
+        function (v) { return v.toFixed(0) + 'px'; },
+        function (v) { window.__pb.povCircle(v); });
+      povCircleS.label.textContent = 'Circle size';
+      pAb.appendChild(povCircleS.node);
+
+      /* ESP */
+      var pVis = addTab('vis', 'ESP');
+      pVis.appendChild(sec('fa-layer-group', 'Overlay'));
+      var espT = toggle(!!(window.__pbvis && window.__pbvis.is()), function (on) { if (on) window.__pbvis.on(); else window.__pbvis.off(); });
+      pVis.appendChild(row('Enemy ESP', espT.node, 'Box + HP bar'));
+      var boneT = toggle(!!BE.on, function (on) { window.__pbvis.bone(on, BE.range); });
+      pVis.appendChild(rowRisk('Bone ESP', boneT.node, 'Skeleton'));
+      var boneRangeS = slider(20, 120, 5, BE.range, function (v) { return v + 'm'; }, function (v) { BE.range = v; if (BE.on) window.__pbvis.bone(1, v); });
+      boneRangeS.label.textContent = 'Bone range'; pVis.appendChild(boneRangeS.node);
+      var hpoT = toggle(!!HPO.on, function (on) { window.__pbx.hpo(on); });
+      pVis.appendChild(row('HP overlay', hpoT.node, 'Angka HP'));
+      var rdT = toggle(!!RD.on, function (on) { window.__pbx.radar(on); });
+      pVis.appendChild(row('Radar mini', rdT.node, 'Minimap'));
+      var trT = toggle(!!TR.on, function (on) { window.__pbx.tracer(on); });
+      pVis.appendChild(row('ESP tracer', trT.node, 'Garis ke musuh'));
+
+      pVis.appendChild(sec('fa-heart-pulse', 'Damage'));
+      var dmgS = slider(1.0, 3.0, 0.05, 1.3, function (v) { return 'x' + v.toFixed(2); }, function (v) { if (window.__pbvis) window.__pbvis.dmg(v); });
+      dmgS.label.textContent = 'Damage'; pVis.appendChild(dmgS.node);
+
+      /* GACOR */
+      var pGac = addTab('gacor', 'GACOR');
+      pGac.appendChild(sec('fa-bullseye', 'Aim Enhancement'));
+      var predT = toggle(!!PR.on, function (on) { window.__pbx.pred(on, PR.ms); });
+      pGac.appendChild(rowRisk('Prediction (lead)', predT.node, 'Aim ke depan'));
+      var predS = slider(0, 400, 10, PR.ms, function (v) { return v.toFixed(0) + 'ms'; }, function (v) { PR.ms = v; if (PR.on) window.__pbx.pred(1, v); });
+      predS.label.textContent = 'Lead time'; pGac.appendChild(predS.node);
+      var saT = toggle(!!SA.on, function (on) { window.__pbx.silent(on); });
+      pGac.appendChild(rowRisk('Silent aim', saT.node, 'Peluru ke kepala'));
+      var tbT = toggle(!!TB.on, function (on) { window.__pbx.trig(on); });
+      pGac.appendChild(rowRisk('Auto trigger', tbT.node, 'Tembak di musuh'));
+
+      pGac.appendChild(sec('fa-gun', 'Shooting'));
+      var sfT = toggle(!!SF.on, function (on) { window.__pbx.smoothFire(on); });
+      pGac.appendChild(row('Smooth fire', sfT.node, 'Anti-macet (rekomendasi ON)'));
+      var rapidT = toggle(!!RF.on, function (on) { window.__pbx.rapid(on); });
+      pGac.appendChild(rowRisk('Rapid fire', rapidT.node, 'Hilangkan jeda'));
+      var frT = toggle(!!FR.on, function (on) { window.__pbx.fastReload(on); });
+      pGac.appendChild(rowRisk('Fast reload', frT.node, 'Reload instan'));
+      var isT2 = toggle(!!IS.on, function (on) { window.__pbx.instScope(on); });
+      pGac.appendChild(rowRisk('Instant scope', isT2.node, 'Scope cepat'));
+
+      pGac.appendChild(sec('fa-shield-halved', 'Combat'));
+      var wallT = toggle(!!FL.wallbang, function (on) { window.__pbx.wallbang(on); });
+      pGac.appendChild(rowRisk('Wallbang', wallT.node, 'Tembus dinding'));
+      var ammoT = toggle(!!FL.infAmmo, function (on) { window.__pbx.infAmmo(on); });
+      pGac.appendChild(rowRisk('Infinite ammo', ammoT.node, 'Ammo tak habis'));
+      var nrecT = toggle(!!FL.noRecoil, function (on) { window.__pbx.noRecoil(on); });
+      pGac.appendChild(rowRisk('No recoil', nrecT.node, 'Recoil nol'));
+
+      /* MISC */
+      var pMisc = addTab('misc', 'MISC');
+      pMisc.appendChild(sec('fa-right-left', 'Quick Swap'));
+      var qcT = toggle(!!(window.__pbqc && window.__pbqc.st().on), function (on) { if (on) window.__pbqc.on(); else window.__pbqc.off(); });
+      pMisc.appendChild(row('Quick swap', qcT.node, 'Ganti senjata instan'));
+      var qcFastT = toggle(!!(window.__pbqc && window.__pbqc.st().fast), function (on) { window.__pbqc.cfg({ fast: on ? 1 : 0 }); });
+      pMisc.appendChild(row('Instant swap', qcFastT.node, 'Skip animasi'));
+      var swapBtn = el('div', 'fk-btn');
+      swapBtn.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i> Swap (Q)';
+      swapBtn.addEventListener('click', function () { try { window.__pbqc.swap(); } catch (e) {} });
+      var swapWrap = el('div', 'fk-btns');
+      swapWrap.appendChild(swapBtn); pMisc.appendChild(swapWrap);
+
+      pMisc.appendChild(sec('fa-heart', 'Survival'));
+      var irT = toggle(!!IR.on, function (on) { window.__pbx.respawn(on); });
+      pMisc.appendChild(row('Instant respawn', irT.node, 'Hidup langsung'));
+      var godT = toggle(!!FL.godmode, function (on) { window.__pbx.godmode(on); });
+      pMisc.appendChild(rowRisk('Godmode', godT.node, 'Unlimited spawn flicker'));
+      var ncT = toggle(!!FL.noclip, function (on) { window.__pbx.noclip(on); });
+      pMisc.appendChild(rowRisk('Noclip', ncT.node, 'Tembus dinding'));
+
+      pMisc.appendChild(sec('fa-toolbox', 'Utility'));
+      var nadeT = toggle(!!(window.__pbnade && window.__pbnade.is()), function (on) { window.__pbx.nadeAim(on); });
+      pMisc.appendChild(rowRisk('Nade aim', nadeT.node, 'Grenade auto-target'));
+      var akT = toggle(!!FL.antiKick, function (on) { window.__pbx.antiKick(on); });
+      pMisc.appendChild(rowRisk('Anti-kick', akT.node, 'Blokir kick/ban'));
+
+      /* INFO */
+      var pInfo = addTab('info', 'INFO');
+      pInfo.appendChild(sec('fa-signal', 'Status'));
+      var foot = el('div', 'fk-foot', '');
+      pInfo.appendChild(foot);
+      var statBox = el('div', 'fk-foot', '');
+      statBox.style.marginTop = '3px'; pInfo.appendChild(statBox);
+      pInfo.appendChild(sec('fa-key', 'Bypass'));
+      var bypassInfo = el('div', null, '');
+      bypassInfo.style.cssText = 'font-size:9px;line-height:1.4;color:#a0aab5';
+      bypassInfo.innerHTML = '<div>L1 preboot · flex gate</div><div>L1b integrity check bypass</div><div>L2 hide · L3 self-heal · L4 fp-rotate</div><div>L5 direct-state-write · L6 bone-accurate</div>';
+      pInfo.appendChild(bypassInfo);
+      pInfo.appendChild(sec('fa-triangle-exclamation', 'Danger'));
+      var resetBtn = el('div', 'fk-btn danger');
+      resetBtn.innerHTML = '<i class="fa-solid fa-trash-can"></i> Reset semua';
+      resetBtn.addEventListener('click', function () {
+        try {
+          window.__pb.off(); window.__pbvis.on(); window.__pbnade.on();
+          window.__pbqc.on(); window.__pbqc.cfg({ fast: 0 });
+          window.__pbx.pred(0); window.__pbx.rapid(0); window.__pbx.fastReload(0);
+          window.__pbx.instScope(0); window.__pbx.trig(0); window.__pbx.silent(0);
+          window.__pbx.lob(0); window.__pbx.respawn(0); window.__pbx.radar(0);
+          window.__pbx.hpo(0); window.__pbx.fovc(0); window.__pbx.tracer(0);
+          window.__pbx.wallbang(1); window.__pbx.infAmmo(1); window.__pbx.noRecoil(1);
+          window.__pbx.godmode(0); window.__pbx.noclip(0); window.__pbx.nadeAim(1);
+          window.__pbx.antiKick(1); window.__pbx.smoothFire(1);
+          window.__pb.aimbot(0);
+          window.__pbvis.bone(0);
+          window.__pb.hitbox('head');
+          window.__pb.headBias(0); window.__pb.bodyBias(0);
+          syncAll();
+        } catch (e) {}
+      });
+      var resetWrap = el('div', 'fk-btns');
+      resetWrap.appendChild(resetBtn); pInfo.appendChild(resetWrap);
+      pInfo.appendChild(el('div', 'fk-warn', 'Fitur RISK bisa terdeteksi server.'));
+
+      function refreshFoot() {
+        try {
+          var s2 = window.__pb && window.__pb.state();
+          if (!s2) { foot.textContent = 'engine not ready…'; return; }
+          var parts = [];
+          parts.push(s2.aim ? 'AIM ✓' : 'AIM ✕');
+          parts.push(s2.aimbot ? 'AB ✓' : 'AB ✕');
+          parts.push(s2.G ? 'G1' : 'G0');
+          parts.push('en ' + s2.enemies);
+          parts.push('lk ' + s2.lock);
+          if (s2.lock) parts.push(s2.dist.toFixed(1) + 'm');
+          if (s2.aimbotActive) parts.push('AB LOCK');
+          foot.textContent = parts.join(' · ');
+          statBox.textContent = 'bots ' + s2.bots + ' · fire ' + s2.fire + ' · sens ' + s2.sens + ' · fov ' + s2.fov + ' · circle ' + s2.povCircleR.toFixed(0) + 'px';
+        } catch (e) { foot.textContent = '…'; }
+      }
+      setInterval(refreshFoot, 500);
+
+      function syncAll() {
+        try {
+          if (window.__pb) {
+            aimT.set(!!window.__pb.state().aim);
+            povCircleS.set(window.__pb.state().povCircleR);
+            hitboxSelect.value = window.__pb.state().hitbox;
+            aimbotT.set(!!window.__pb.state().aimbot);
+            abGainS.set(P.aimbotGain);
+            abHoldS.set(P.aimbotHoldMs);
+            headBiasS.set(P.headBias);
+            bodyBiasS.set(P.bodyBias);
+          }
+          if (window.__pbvis) espT.set(!!window.__pbvis.is());
+          if (window.__pbqc) { var q = window.__pbqc.st(); qcT.set(!!q.on); qcFastT.set(!!q.fast); }
+          autoFireT.set(!!P.autoFire); invertT.set(!!O.invert);
+          if (window.__pbx) {
+            var x = window.__pbx.st();
+            predT.set(!!x.pred); rapidT.set(!!x.rapid); frT.set(!!x.fastReload);
+            isT2.set(!!x.instScope); tbT.set(!!x.trig); saT.set(!!x.silent);
+            irT.set(!!x.respawn); rdT.set(!!x.radar); hpoT.set(!!x.hpo); fcT.set(!!x.fovc);
+            trT.set(!!x.tracer);
+            wallT.set(!!x.wallbang); ammoT.set(!!x.infAmmo); nrecT.set(!!x.noRecoil);
+            godT.set(!!x.godmode); ncT.set(!!x.noclip); nadeT.set(!!x.nadeAim); akT.set(!!x.antiKick);
+            sfT.set(!!x.smoothFire);
+          }
+        } catch (e) {}
+      }
+      setInterval(syncAll, 1000);
+
+      /* DRAG */
+      (function () {
+        var dragging = false, ox = 0, oy = 0;
+        head.addEventListener('mousedown', function (e) {
+          if (e.target === toggleBtn) return;
+          dragging = true;
+          var r = panel.getBoundingClientRect();
+          ox = t.clientX - r.left; oy = t.clientY - r.top;
+        }, { passive: true });
+        addEventListener('mousemove', function (e) {
+          if (!dragging) return;
+          var x = e.clientX - ox, y = e.clientY - oy;
+          x = Math.max(4, Math.min(innerWidth - 60, x));
+          y = Math.max(4, Math.min(innerHeight - 40, y));
+          panel.style.left = x + 'px'; panel.style.top = y + 'px';
+          panel.style.right = 'auto';
+        });
+        addEventListener('touchmove', function (e) {
+          if (!dragging) return;
+          if (!e.touches || !e.touches[0]) return;
+          var t = e.touches[0];
+          var x = t.clientX - ox, y = t.clientY - oy;
+          x = Math.max(4, Math.min(innerWidth - 60, x));
+          y = Math.max(4, Math.min(innerHeight - 40, y));
+          panel.style.left = x + 'px'; panel.style.top = y + 'px';
+          panel.style.right = 'auto';
+        }, { passive: true });
+        addEventListener('mouseup', function () { dragging = false; });
+        addEventListener('touchend', function () { dragging = false; });
+      })();
+
+      function mount() {
+        var host = document.body || document.documentElement;
+        if (!host) return setTimeout(mount, 100);
+        host.appendChild(panel);
+        var lastTab = 'aim';
+        try { lastTab = localStorage.getItem(TAB_KEY) || 'aim'; } catch (e) {}
+        if (!pages[lastTab]) lastTab = 'aim';
+        selectTab(lastTab);
+        var collapsed = false;
+        try { collapsed = localStorage.getItem('ir_collapsed') === '1'; } catch (e) {}
+        setCollapsed(collapsed);
+        refreshFoot();
+      }
+      mount();
+
+      log('iRiLLL MODZ UI ready');
+    })();
   }
 
   pfGate();
