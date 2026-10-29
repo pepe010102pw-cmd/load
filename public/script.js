@@ -1,20 +1,18 @@
 /* ============================================================
    iRiLLL MODZ — SCRIPT.JS
-   version: 2.9.0
-   Changes:
-     - FIX: fireHeld / AB.freshFire untuk mouse (aimbot snap)
-     - FIX: headPointLogical / bodyPointLogical pakai obj.position
-     - FIX: silent aim pakai THREE.Vector3 (bukan plain object)
-     - FIX: lockYawPitch setter tidak early-return (NaN guard)
-     - FIX: aimFlush reset delta saat locked (anti-jump)
-     - FIX: silent aim berlaku ke SEMUA arah tembakan
+   version: 3.1.0
+   Changes from 3.0:
+     - FIX: aimlock pakai prediksi vel target × t_peluru (lead)
+     - FIX: silent aim redirect SEMUA peluru ke target lock
+     - FIX: silent aim lock target manapun dalam FOV besar (120°)
+     - NEW: predictive bone position (bone + vel × dt)
    ============================================================ */
 (function () {
   'use strict';
   if (window.__pb) return;
 
   /* ============================================================
-     LICENSE GATE — LOCAL KEYLIST
+     LICENSE GATE
      ============================================================ */
   var PF_KEY_LS    = 'iril_pf_key';
   var PF_TOKEN_LS  = 'iril_pf_token';
@@ -23,7 +21,7 @@
 
   var PF_LOCAL_KEYS = [
     'IRILMODZPREMIUM','IRIL-VIP-MODZ','IRIL-ABCD-1234','IRIL-EFGH-5678','IRIL-IJKL-9012',
-    'my key 123','IRILMODZTRIAL10','k','IRILMODZ7DAY'
+    'my key 123','IRILMODZTRIAL','k','IRILMODZ7DAY'
   ];
 
   function pfGet(k, d) { try { var v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } }
@@ -133,17 +131,14 @@
     }, 30000);
   }
 
-  /* ============================================================
-     CORE
-     ============================================================ */
   function bootCore() {
-    var V = '2.9.0';
+    var V = '3.1.0';
     var BRAND = 'iRiLLL MODZ';
     function log() { try { console.log.apply(console, ['[iR]'].concat([].slice.call(arguments))); } catch (e) {} }
 
-    /* ------------------------------------------------------------
-       L1 PREBOOT — integrity bypass + flex gate
-       ------------------------------------------------------------ */
+    /* ============================================================
+       L1 PREBOOT
+       ============================================================ */
     (function preboot() {
       try {
         if (!/\/jogo|game\.html/.test(location.pathname)) return;
@@ -248,15 +243,18 @@
 
     var HIDDEN = { pb: null, pbvis: null, pbnade: null, pbqc: null, pbx: null };
 
+    /* ============================================================
+       PARAMETER
+       ============================================================ */
     var P = {
-      cone: 0.45, reach: 150, autoFire: 0, gain: 0.9, headR: 0.11, mode: 'near', bias: 0.35,
-      aimMode: 'pov', povCircleR: 180,
+      cone: 0.65, reach: 200, autoFire: 0, gain: 0.9, mode: 'near', bias: 0.35,
+      aimMode: 'pov', povCircleR: 220,
       hitbox: 'head',
       aimbotOn: 0,
       aimbotGain: 1.1,
       aimbotHoldMs: 250,
-      headBias: 0.0,
-      bodyBias: 0.0
+      bulletSpeed: 350,   // m/s untuk lead prediction
+      leadFactor: 1.0     // multiplier lead
     };
     var O = { sens: 0.5, fov: 70, invert: false };
     function readOpts() {
@@ -282,30 +280,28 @@
       if (isFinite(_abg) && _abg > 0) P.aimbotGain = _abg;
       var _abh = parseFloat(localStorage.getItem('ir_aimbot_hold'));
       if (isFinite(_abh) && _abh >= 50) P.aimbotHoldMs = _abh;
-      var _hbf = parseFloat(localStorage.getItem('ir_head_bias'));
-      if (isFinite(_hbf)) P.headBias = _hbf;
-      var _bbf = parseFloat(localStorage.getItem('ir_body_bias'));
-      if (isFinite(_bbf)) P.bodyBias = _bbf;
+      var _bs = parseFloat(localStorage.getItem('ir_bullet_speed'));
+      if (isFinite(_bs) && _bs > 0) P.bulletSpeed = _bs;
+      var _lf = parseFloat(localStorage.getItem('ir_lead'));
+      if (isFinite(_lf) && _lf >= 0) P.leadFactor = _lf;
     } catch (e) {}
 
     var G = null, aimOn = false, fireHeld = 0, nextTap = 0, holding = false;
-    var lastPick = null, st = { v: V, aim: false, G: false, bots: 0, enemies: 0, lock: 0, err: 0, fire: 0, dist: 0, hitbox: P.hitbox, aimbot: 0 };
+    var lastPick = null, st = { v: V, aim: false, G: false, bots: 0, enemies: 0, lock: 0, err: 0, fire: 0, dist: 0, hitbox: P.hitbox, aimbot: 0, lead: 0 };
 
     var AB = { lockUntil: 0, target: null, lastShot: 0, freshFire: 0 };
     var SF = { on: 1 };
 
     var AIM = { dx: 0, dy: 0, queued: false };
-    var AIMLOCK = { on: false, targetYaw: 0, targetPitch: 0, locked: false, smooth: 1.0 };
+    var AIMLOCK = { on: false, targetYaw: 0, targetPitch: 0, locked: false };
 
     function aimWrite(dx, dy) { AIM.dx += dx; AIM.dy += dy; AIM.queued = true; }
 
-    /* FIX: aimFlush selalu reset delta, dan pakai __pbYawRaw/__pbPitchRaw yang valid */
     function aimFlush(g) {
       if (!AIM.queued) return;
       AIM.queued = false;
       var s = g && g.P && g.P.s;
       if (!s || s.dead) { AIM.dx = AIM.dy = 0; return; }
-      // saat locked, tetap buang delta (biar tidak numpuk dan jump saat unlock)
       if (AIMLOCK.locked) { AIM.dx = AIM.dy = 0; return; }
       var sens = O.sens * ((g.camera && g.camera.fov || 70) / O.fov) * 0.005;
       var dyaw   = -AIM.dx * sens;
@@ -322,7 +318,6 @@
       AIM.dx = AIM.dy = 0;
     }
 
-    /* FIX: lockYawPitch selalu update __pbYawRaw supaya sinkron saat unlock */
     function lockYawPitch(s) {
       if (!s || s.__pbYawLocked) return;
       s.__pbYawRaw   = +s.yaw   || 0;
@@ -331,15 +326,15 @@
         Object.defineProperty(s, 'yaw', {
           configurable: true,
           get: function () { return AIMLOCK.locked ? AIMLOCK.targetYaw : this.__pbYawRaw; },
-          set: function (v) { this.__pbYawRaw = +v || 0; }   // SELALU update raw
+          set: function (v) { this.__pbYawRaw = +v || 0; }
         });
         Object.defineProperty(s, 'pitch', {
           configurable: true,
           get: function () { return AIMLOCK.locked ? AIMLOCK.targetPitch : this.__pbPitchRaw; },
-          set: function (v) { this.__pbPitchRaw = +v || 0; } // SELALU update raw
+          set: function (v) { this.__pbPitchRaw = +v || 0; }
         });
         s.__pbYawLocked = true;
-        log('yaw/pitch locked on player');
+        log('yaw/pitch locked');
       } catch (e) { log('lockYawPitch fail', e); }
     }
 
@@ -358,8 +353,8 @@
     }
     setInterval(function () {
       if (DBG.n > 3) return;
-      if (game()) { dbg('iRiLLL MODZ'); if (++DBG.n > 3) { try { DBG.el.remove(); } catch (e) {} DBG.el = null; } }
-      else if (!DBG.n) { dbg('iRiLLL MODZ'); }
+      if (game()) { dbg('iRiLLL MODZ v' + V); if (++DBG.n > 3) { try { DBG.el.remove(); } catch (e) {} DBG.el = null; } }
+      else if (!DBG.n) { dbg('iRiLLL MODZ v' + V); }
     }, 1000);
 
     function game() {
@@ -371,78 +366,120 @@
     }
     function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
     function wrap(a) { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; }
-    function wpos(b, out) { var e = b.matrixWorld.elements; out.x = e[12]; out.y = e[13]; out.z = e[14]; return out; }
+    function wpos(b, out) {
+      if (!b || !b.matrixWorld || !b.matrixWorld.elements) return false;
+      var e = b.matrixWorld.elements;
+      out.x = e[12]; out.y = e[13]; out.z = e[14];
+      return true;
+    }
 
-    var A = { x: 0, y: 0, z: 0 }, B = { x: 0, y: 0, z: 0 };
+    var A = { x: 0, y: 0, z: 0 };
     var _hpOut = { x: 0, y: 0, z: 0 };
     var _pv = null, _pDir = { x: 0, y: 0, z: 0 };
+    var F = { x: 0, y: 0, z: 0 }, C = { x: 0, y: 0, z: 0 };
 
     /* ============================================================
-       BONE-ACCURATE TARGET POINT
+       BONE TARGET — PRESISI
        ============================================================ */
     function headPoint(p) {
       var by = p && p.c && p.c.byName; if (!by) return null;
-      var h = by.Head || by.head || null;
-      var g = by.Bone_HeadGearAttach || null;
-      if (h) {
-        try { wpos(h, _hpOut); } catch (e) { return null; }
-        if (g) {
-          try { wpos(g, A); _hpOut.y = (_hpOut.y + A.y) * 0.5 + P.headBias; }
-          catch (e) { _hpOut.y += P.headBias; }
-        } else { _hpOut.y += P.headBias; }
-        return _hpOut;
-      }
+      var h = by.Head || by.head;
+      var g = by.Bone_HeadGearAttach;
       if (g) {
-        try { wpos(g, _hpOut); } catch (e) { return null; }
-        _hpOut.y -= 0.12 - P.headBias;
-        return _hpOut;
+        if (wpos(g, _hpOut)) { _hpOut.y -= 0.05; return _hpOut; }
       }
-      return null;
+      if (h) {
+        if (wpos(h, _hpOut)) { _hpOut.y += 0.11; return _hpOut; }
+      }
+      var base = (p.obj && p.obj.position) ? p.obj.position : (p.mover && p.mover.pos);
+      if (!base) return null;
+      _hpOut.x = base.x;
+      _hpOut.y = base.y + (p.mover && p.mover.crouch ? 1.18 : 1.68);
+      _hpOut.z = base.z;
+      return _hpOut;
     }
     function bodyPoint(p) {
       var by = p && p.c && p.c.byName; if (!by) return null;
-      var h = by.Spine2 || by.Spine1 || by.Pelvis || by.Neck;
-      if (!h) return null;
-      try { wpos(h, _hpOut); } catch (e) { return null; }
-      _hpOut.y += P.bodyBias;
-      return _hpOut;
-    }
-
-    /* FIX: pakai obj.position (visual) untuk remote, bukan mover.pos (stale) */
-    function headPointLogical(p) {
-      var base = (p && p.obj && p.obj.position) ? p.obj.position : (p && p.mover && p.mover.pos);
+      var h = by.Spine2 || by.Spine1 || by.Spine3 || by.Neck || by.Pelvis;
+      if (h && wpos(h, _hpOut)) return _hpOut;
+      var base = (p.obj && p.obj.position) ? p.obj.position : (p.mover && p.mover.pos);
       if (!base) return null;
       _hpOut.x = base.x;
-      _hpOut.y = base.y + (p.mover && p.mover.crouch ? 1.25 : 1.8) + P.headBias;
+      _hpOut.y = base.y + (p.mover && p.mover.crouch ? 0.82 : 1.15);
       _hpOut.z = base.z;
       return _hpOut;
     }
-    function bodyPointLogical(p) {
-      var base = (p && p.obj && p.obj.position) ? p.obj.position : (p && p.mover && p.mover.pos);
-      if (!base) return null;
-      _hpOut.x = base.x;
-      _hpOut.y = base.y + (p.mover && p.mover.crouch ? 0.85 : 1.2) + P.bodyBias;
-      _hpOut.z = base.z;
-      return _hpOut;
-    }
-
-    function getTargetPointLogical(p) {
+    function nearestPoint(p) {
       var hp = headPoint(p);
+      if (!hp) return bodyPoint(p);
+      var hx = hp.x, hy = hp.y, hz = hp.z;
       var bp = bodyPoint(p);
-      if (P.hitbox === 'head')   return hp || headPointLogical(p);
-      if (P.hitbox === 'body')   return bp || bodyPointLogical(p);
-      // nearest: pilih head atau body yang paling dekat ke kamera
-      var hpL = hp || headPointLogical(p);
-      var bpL = bp || bodyPointLogical(p);
-      if (!hpL) return bpL;
-      if (!bpL) return hpL;
-      var dxh = hpL.x - C.x, dyh = hpL.y - C.y, dzh = hpL.z - C.z;
-      var dh = Math.sqrt(dxh*dxh + dyh*dyh + dzh*dzh);
-      var dxb = bpL.x - C.x, dyb = bpL.y - C.y, dzb = bpL.z - C.z;
-      var db = Math.sqrt(dxb*dxb + dyb*dyb + dzb*dzb);
-      if (dh <= db) { _hpOut.x = hpL.x; _hpOut.y = hpL.y; _hpOut.z = hpL.z; }
-      else          { _hpOut.x = bpL.x; _hpOut.y = bpL.y; _hpOut.z = bpL.z; }
+      if (!bp) return hp;
+      var bx = bp.x, by = bp.y, bz = bp.z;
+      var dh = (hx-C.x)*(hx-C.x) + (hy-C.y)*(hy-C.y) + (hz-C.z)*(hz-C.z);
+      var db = (bx-C.x)*(bx-C.x) + (by-C.y)*(by-C.y) + (bz-C.z)*(bz-C.z);
+      if (dh <= db) { _hpOut.x = hx; _hpOut.y = hy; _hpOut.z = hz; }
+      else { _hpOut.x = bx; _hpOut.y = by; _hpOut.z = bz; }
       return _hpOut;
+    }
+
+    /* pilih titik sesuai hitbox yang diinginkan */
+    function getTargetPointLogical(p) {
+      if (P.hitbox === 'head') return headPoint(p);
+      if (P.hitbox === 'body') return bodyPoint(p);
+      return nearestPoint(p);
+    }
+
+    /* ============================================================
+       LEAD PREDICTION — prediksi titik tembak berdasarkan vel target
+       ============================================================ */
+    var _leadOut = { x: 0, y: 0, z: 0 };
+    function predictPoint(p, basePt, fromPt) {
+      /* hitung waktu peluru sampai target */
+      var dx = basePt.x - fromPt.x;
+      var dy = basePt.y - fromPt.y;
+      var dz = basePt.z - fromPt.z;
+      var dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+      if (dist < 1 || P.bulletSpeed <= 0) {
+        _leadOut.x = basePt.x; _leadOut.y = basePt.y; _leadOut.z = basePt.z;
+        return _leadOut;
+      }
+      // t = dist / bullet_speed (dikali leadFactor)
+      var t = (dist / P.bulletSpeed) * P.leadFactor;
+      // vel target (dari mover.vel)
+      var vx = 0, vy = 0, vz = 0;
+      try {
+        if (p.mover && p.mover.vel) {
+          vx = +p.mover.vel.x || 0;
+          vy = +p.mover.vel.y || 0;
+          vz = +p.mover.vel.z || 0;
+        } else if (p.net && p.net.pos) {
+          // fallback: pakai snap terakhir
+          if (p.snaps && p.snaps.length >= 2) {
+            var a = p.snaps[p.snaps.length-2];
+            var b = p.snaps[p.snaps.length-1];
+            var dt = b.t - a.t;
+            if (dt > 0.02 && dt < 0.5) {
+              vx = (b.pos.x - a.pos.x) / dt;
+              vy = (b.pos.y - a.pos.y) / dt;
+              vz = (b.pos.z - a.pos.z) / dt;
+            }
+          }
+        }
+      } catch (e) {}
+      _leadOut.x = basePt.x + vx * t;
+      _leadOut.y = basePt.y + vy * t * 0.5;  // vertikal lebih kecil, karena bullet drop handling di game
+      _leadOut.z = basePt.z + vz * t;
+      return _leadOut;
+    }
+
+    /* full target point dengan lead (untuk aimlock & silent aim) */
+    function getTargetPointLead(p, fromPt) {
+      var base = getTargetPointLogical(p);
+      if (!base) return null;
+      var bp = { x: base.x, y: base.y, z: base.z };
+      var lead = predictPoint(p, bp, fromPt || C);
+      return lead;
     }
 
     function isInsidePOVCircle(cam, hp) {
@@ -481,14 +518,6 @@
       }
       return p.hitTest(o, d, m);
     }
-    function move(dx, dy) {
-      try {
-        var ev = new MouseEvent('mousemove', { bubbles: true, cancelable: true, movementX: dx, movementY: dy });
-        if (ev.movementX !== dx) try { Object.defineProperty(ev, 'movementX', { value: dx }); } catch (e) {}
-        if (ev.movementY !== dy) try { Object.defineProperty(ev, 'movementY', { value: dy }); } catch (e) {}
-        (document.body || document.documentElement).dispatchEvent(ev);
-      } catch (e) {}
-    }
     function down() {
       try {
         var g = G || game();
@@ -508,27 +537,23 @@
       holding = false;
     }
 
+    addEventListener('mousemove', function (e) {
+      if (e.movementX || e.movementY) aimWrite(e.movementX, e.movementY);
+    }, true);
+    addEventListener('mousedown', function (e) {
+      if (e.button === 0) { fireHeld = 1; AB.freshFire = 1; st.fire = 1; }
+    }, true);
+    addEventListener('mouseup', function (e) {
+      if (e.button === 0) { fireHeld = 0; st.fire = 0; }
+    }, true);
+    addEventListener('blur', function () { fireHeld = 0; st.fire = 0; AB.freshFire = 0; });
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) { fireHeld = 0; st.fire = 0; }
+    });
+
     var fireIds = new Set();
     function inZone(t) { return t.clientX > innerWidth * 0.50 && t.clientY > innerHeight * 0.45; }
     function syncFire() { fireHeld = fireIds.size; st.fire = fireHeld; }
-
-    /* ============================================================
-       FIX #1 & #2 — FIRE STATE UNTUK MOUSE
-       ============================================================ */
-    addEventListener('mousedown', function (e) {
-      if (e.button === 0) {
-        fireHeld = 1;
-        AB.freshFire = 1;
-        st.fire = 1;
-      }
-    }, true);
-    addEventListener('mouseup', function (e) {
-      if (e.button === 0) {
-        fireHeld = 0;
-        st.fire = 0;
-      }
-    }, true);
-
     addEventListener('touchstart', function (e) {
       for (var i = 0; i < e.changedTouches.length; i++) {
         var t = e.changedTouches[i];
@@ -547,8 +572,9 @@
     addEventListener('touchend', touchEnd, true);
     addEventListener('touchcancel', touchEnd, true);
 
-    var F = { x: 0, y: 0, z: 0 }, C = { x: 0, y: 0, z: 0 };
-
+    /* ============================================================
+       MAIN TICK
+       ============================================================ */
     function tick() {
       requestAnimationFrame(tick);
       if (!G) { G = game(); if (!G) return; st.G = true; log('G unlocked', V); try { buzz(30); } catch (e) {} }
@@ -568,13 +594,14 @@
       F.x = -Math.sin(yaw) * cp; F.y = Math.sin(pitch); F.z = -Math.cos(yaw) * cp;
 
       var list = g.bots;
-      var best = null, bestP = null, bestA = 1e9, bestD = 1e9, myTeam = self.team, n = 0, en = 0;
+      var best = null, bestPt = null, bestA = 1e9, bestD = 1e9, myTeam = self.team, n = 0, en = 0;
       for (var i = 0; i < list.length; i++) {
         var p = list[i];
         if (!isBotReal(p)) continue;
         n++;
         if (p.team === myTeam || p === self) continue;
-        var hp = getTargetPointLogical(p); if (!hp) continue;
+        // pakai prediksi lead untuk posisi tembak
+        var hp = getTargetPointLead(p, C); if (!hp) continue;
         var dx = hp.x - C.x, dy = hp.y - C.y, dz = hp.z - C.z;
         var d = Math.sqrt(dx*dx + dy*dy + dz*dz);
         if (d < 2 || d > P.reach) continue;
@@ -584,7 +611,7 @@
         var a = Math.sqrt(ey*ey + ep*ep);
         if (a > P.cone) continue;
         var better = (P.mode === 'angle') ? (a < bestA) : (d < bestD - P.bias || (d <= bestD + P.bias && a < bestA));
-        if (better) { bestA = a; bestD = d; best = p; bestP = { x: hp.x, y: hp.y, z: hp.z }; }
+        if (better) { bestA = a; bestD = d; best = p; bestPt = { x: hp.x, y: hp.y, z: hp.z }; }
       }
       st.bots = n; st.enemies = en;
 
@@ -596,7 +623,7 @@
         for (var j = 0; j < list.length; j++) {
           var q = list[j];
           if (!isBotReal(q) || q === self || q.team === myTeam) continue;
-          var qp = getTargetPointLogical(q); if (!qp) continue;
+          var qp = getTargetPointLead(q, C); if (!qp) continue;
           var qdx = qp.x - C.x, qdy = qp.y - C.y, qdz = qp.z - C.z;
           var qd = Math.sqrt(qdx*qdx + qdy*qdy + qdz*qdz);
           if (qd < 2 || qd > P.reach) continue;
@@ -609,6 +636,9 @@
       if (AB.target && now < AB.lockUntil) doAimbot = true; else AB.target = null;
 
       if (doAimbot && AB.target) {
+        // RE-CALCULATE lead setiap frame karena target bergerak
+        var curAp = getTargetPointLead(AB.target.bot, C) || AB.target.p;
+        AB.target.p = { x: curAp.x, y: curAp.y, z: curAp.z };
         var ap = AB.target.p;
         var tYawAb   = Math.atan2(-(ap.x - C.x), -(ap.z - C.z));
         var tPitchAb = Math.asin(clamp((ap.y - C.y) / Math.max(0.001, Math.hypot(ap.x - C.x, ap.y - C.y, ap.z - C.z)), -1, 1));
@@ -616,7 +646,7 @@
         while (tYawAb < -Math.PI) tYawAb += 2 * Math.PI;
         var rawY = self.__pbYawRaw   != null ? self.__pbYawRaw   : (+self.yaw   || 0);
         var rawP = self.__pbPitchRaw != null ? self.__pbPitchRaw : (+self.pitch || 0);
-        var k = Math.min(1, Math.max(0.15, P.aimbotGain * 0.5));
+        var k = Math.min(1, Math.max(0.35, P.aimbotGain * 0.7)); // lebih responsif (0.35 minimum)
         AIMLOCK.on = true; AIMLOCK.locked = true;
         AIMLOCK.targetYaw   = rawY + wrap(tYawAb - rawY) * k;
         AIMLOCK.targetPitch = rawP + (tPitchAb - rawP) * k;
@@ -629,13 +659,16 @@
           aimFlush(g);
           return;
         }
-        var tYaw   = Math.atan2(-(bestP.x - C.x), -(bestP.z - C.z));
-        var tPitch = Math.asin(clamp((bestP.y - C.y) / Math.max(0.001, bestD), -1, 1));
+        // RE-CALCULATE lead setiap frame
+        var curBp = getTargetPointLead(best, C) || bestPt;
+        bestPt = { x: curBp.x, y: curBp.y, z: curBp.z };
+        var tYaw   = Math.atan2(-(bestPt.x - C.x), -(bestPt.z - C.z));
+        var tPitch = Math.asin(clamp((bestPt.y - C.y) / Math.max(0.001, bestD), -1, 1));
         while (tYaw >  Math.PI) tYaw -= 2 * Math.PI;
         while (tYaw < -Math.PI) tYaw += 2 * Math.PI;
         var rawY2 = self.__pbYawRaw   != null ? self.__pbYawRaw   : (+self.yaw   || 0);
         var rawP2 = self.__pbPitchRaw != null ? self.__pbPitchRaw : (+self.pitch || 0);
-        var kk = Math.min(1, Math.max(0.05, P.gain));
+        var kk = Math.min(1, Math.max(0.5, P.gain)); // lebih responsif
         AIMLOCK.on = true; AIMLOCK.locked = true;
         AIMLOCK.targetYaw   = rawY2 + wrap(tYaw   - rawY2) * kk;
         AIMLOCK.targetPitch = rawP2 + (tPitch - rawP2) * kk;
@@ -648,7 +681,7 @@
         return;
       }
       var fireTarget = doAimbot && AB.target ? AB.target.bot : best;
-      var firePoint = doAimbot && AB.target ? AB.target.p : bestP;
+      var firePoint = doAimbot && AB.target ? AB.target.p : bestPt;
       if (!fireTarget || !firePoint) { aimFlush(g); return; }
 
       if (!doAimbot) {
@@ -681,9 +714,6 @@
       } catch (e) {}
     }, 120);
     setInterval(function () { if (!G) { G = game(); if (G) { st.G = true; log('G late unlock'); } } }, 500);
-    setInterval(function () {
-      try { if (!window.__pbx && HIDDEN.pbx) { try { window.__pbx = HIDDEN.pbx; } catch (e) {} } } catch (e) {}
-    }, 2000);
 
     var FL = { wallbang: 1, infAmmo: 1, noRecoil: 1, godmode: 0, noclip: 0, nadeAim: 1, antiKick: 1 };
 
@@ -696,7 +726,7 @@
           povCircleR: P.povCircleR, hitbox: P.hitbox,
           err: +(st.err * 57.2958).toFixed(2), fire: fireHeld, autoFire: P.autoFire,
           sens: O.sens, fov: O.fov, aimbot: P.aimbotOn, aimbotActive: st.aimbot,
-          headBias: P.headBias, bodyBias: P.bodyBias
+          bulletSpeed: P.bulletSpeed, leadFactor: P.leadFactor
         };
       },
       cfg: function (o) { if (o) for (var k in o) if (k in P) P[k] = o[k]; return P; },
@@ -708,8 +738,8 @@
       aimbot: function (on) { P.aimbotOn = on ? 1 : 0; if (!P.aimbotOn) { AB.target = null; AIMLOCK.locked = false; } try { localStorage.setItem('ir_aimbot', P.aimbotOn ? '1' : '0'); } catch (e) {} return P.aimbotOn; },
       aimbotGain: function (v) { if (typeof v === 'number' && v > 0) { P.aimbotGain = v; try { localStorage.setItem('ir_aimbot_gain', String(v)); } catch (e) {} } return P.aimbotGain; },
       aimbotHold: function (v) { if (typeof v === 'number' && v >= 50) { P.aimbotHoldMs = v; try { localStorage.setItem('ir_aimbot_hold', String(v)); } catch (e) {} } return P.aimbotHoldMs; },
-      headBias: function (v) { if (typeof v === 'number') { P.headBias = v; try { localStorage.setItem('ir_head_bias', String(v)); } catch (e) {} } return P.headBias; },
-      bodyBias: function (v) { if (typeof v === 'number') { P.bodyBias = v; try { localStorage.setItem('ir_body_bias', String(v)); } catch (e) {} } return P.bodyBias; },
+      bulletSpeed: function (v) { if (typeof v === 'number' && v > 0) { P.bulletSpeed = v; try { localStorage.setItem('ir_bullet_speed', String(v)); } catch (e) {} } return P.bulletSpeed; },
+      leadFactor: function (v) { if (typeof v === 'number' && v >= 0) { P.leadFactor = v; try { localStorage.setItem('ir_lead', String(v)); } catch (e) {} } return P.leadFactor; },
       list: function () {
         var g = game(); if (!g) return 'no G';
         return (g.bots || []).map(function (p) {
@@ -790,7 +820,7 @@
         var p = list[i];
         if (!p || !p.obj || !p.c || p === self) continue;
         if (p.team === my || p.dead || !(p.hp > 0)) continue;
-        var hp = headPoint(p) || headPointLogical(p); if (!hp) continue;
+        var hp = headPoint(p); if (!hp) continue;
         var mm = p.obj.matrixWorld && p.obj.matrixWorld.elements; if (!mm) continue;
         var a = eProj(cam, r, hp.x, hp.y, hp.z), b = eProj(cam, r, mm[12], mm[13], mm[14]);
         if (!a || !b) continue;
@@ -1173,21 +1203,6 @@
       } catch (e) {}
     })();
 
-    var KGW = { st: 0, n: 0, next: 0, rl: 0 };
-    setInterval(function () {
-      try {
-        if (!FL.antiKick) return;
-        if (!KGW.n) return;
-        var b = null; try { b = JSON.parse(sessionStorage.getItem('pbweb_battle') || 'null'); } catch (e) {}
-        if (!b) return;
-        var now = Date.now();
-        if (now - KGW.st < 10000 || now < KGW.next) return;
-        if (document.visibilityState === 'hidden') return;
-        KGW.next = now + 120000; KGW.rl++;
-        if (KGW.rl <= 2) location.reload();
-      } catch (e) {}
-    }, 2000);
-
     var NA = { arr: null, at: 0, rf: 0, aim: 1, n: 0, tgt: null };
     function naSolve(from, to, v, g0, hi) {
       var dx = to.x - from.x, dz = to.z - from.z;
@@ -1207,7 +1222,7 @@
       var best = null, bs = 1e9;
       for (var i = 0; i < list.length; i++) {
         var p = list[i];
-        if (!p || p === s || !p.obj || p.net === null) continue;
+        if (!p || p === s || !p.obj) continue;
         if (p.team === my || p.dead || !(p.hp > 0)) continue;
         var e = p.obj.matrixWorld && p.obj.matrixWorld.elements; if (!e) continue;
         var dx = e[12] - s.mover.pos.x, dz = e[14] - s.mover.pos.z;
@@ -1319,6 +1334,7 @@
     };
     window.__pbqc = QC_API; HIDDEN.pbqc = QC_API;
 
+    var PR = { on: 0, ms: 120 };
     var RF = { on: 0 };
     function rfTick() {
       requestAnimationFrame(rfTick);
@@ -1401,89 +1417,140 @@
     try { requestAnimationFrame(tbTick); } catch (e) {}
 
     /* ============================================================
-       SILENT AIM — FIX #4 & #5
-       FIX: pakai THREE.Vector3 (bukan plain object)
-       FIX: berlaku ke SEMUA arah tembakan (tidak hanya saat wbGun)
-       FIX: hitTest menembus ke target walau crosshair tidak tepat
+       SILENT AIM v3.1 — REDIRECT SEMUA PELURU KE TARGET LOCK
        ============================================================ */
-    var SA = { on: 0 };
+    var SA = { on: 0, fovRad: Math.PI / 3 }; // FOV 120° = 60° each side dari crosshair
+    var SA_HEAD = { x: 0, y: 0, z: 0, bot: null, validUntil: 0 };
 
     function getTHREE() {
-      // cari objek THREE dari berbagai sumber
       if (window.THREE && window.THREE.Vector3) return window.THREE;
       try {
         var g = G || game();
         if (g && g.camera && g.camera.position && g.camera.position.constructor) {
           var V3 = g.camera.position.constructor;
-          if (V3 && V3.prototype && V3.prototype.project) {
-            return { Vector3: V3 };
-          }
+          if (V3 && V3.prototype && V3.prototype.project) return { Vector3: V3 };
         }
       } catch (e) {}
       return null;
     }
 
+    /* scan musuh dan pilih target: prioritas yg di crosshair, lalu terdekat */
+    function saUpdateHead(g) {
+      if (!SA.on) return;
+      if (!g || !g.P || !g.P.s) return;
+      var s = g.P.s;
+      if (s.dead) { SA_HEAD.bot = null; return; }
+      var cam = g.camera, list = g.bots || [];
+      var me = cam.matrixWorld.elements;
+      var cx = me[12], cy = me[13], cz = me[14];
+      var yaw = +s.yaw || 0, pitch = +s.pitch || 0;
+      var cp = Math.cos(pitch);
+      var fx = -Math.sin(yaw) * cp, fy = Math.sin(pitch), fz = -Math.cos(yaw) * cp;
+
+      var best = null, bestScore = 1e9;
+      // target lama tetap valid kalau masih hidup, dekat, dan dalam FOV
+      var prev = SA_HEAD.bot;
+      if (prev && !prev.dead && prev.hp > 0 && prev.team !== s.team) {
+        var prevHp = getTargetPointLead(prev, C);
+        if (prevHp) {
+          var pdx = prevHp.x - cx, pdy = prevHp.y - cy, pdz = prevHp.z - cz;
+          var pd = Math.sqrt(pdx*pdx + pdy*pdy + pdz*pdz);
+          if (pd < P.reach + 50) {
+            var pdot = (pdx*fx + pdy*fy + pdz*fz) / pd;
+            if (Math.acos(clamp(pdot, -1, 1)) < SA.fovRad) {
+              best = prev;
+              bestScore = pd * 0.5;  // prioritas ke target lama (histeresis)
+            }
+          }
+        }
+      }
+
+      for (var i = 0; i < list.length; i++) {
+        var p = list[i];
+        if (!isBotReal(p) || p === s || p.team === s.team) continue;
+        var hp = getTargetPointLead(p, C); if (!hp) continue;
+        var dx = hp.x - cx, dy = hp.y - cy, dz = hp.z - cz;
+        var d = Math.sqrt(dx*dx + dy*dy + dz*dz);
+        if (d < 1.5 || d > P.reach + 50) continue;
+        var dot = (dx*fx + dy*fy + dz*fz) / d;
+        var ang = Math.acos(clamp(dot, -1, 1));
+        if (ang > SA.fovRad) continue;
+        // score: sudut lebih penting dari jarak
+        var score = ang * 100 + d * 0.3;
+        if (score < bestScore) {
+          bestScore = score;
+          best = p;
+        }
+      }
+
+      if (!best) { SA_HEAD.bot = null; return; }
+      var targetPt = getTargetPointLead(best, C);
+      if (!targetPt) { SA_HEAD.bot = null; return; }
+      SA_HEAD.x = targetPt.x;
+      SA_HEAD.y = targetPt.y;
+      SA_HEAD.z = targetPt.z;
+      SA_HEAD.bot = best;
+      SA_HEAD.validUntil = performance.now() + 500;
+    }
+
+    /* patch hitTest: redirect SEMUA peluru ke target lock */
     function saPatch() {
       var g = G || game();
       var L = g && g.bots;
       if (!L || !L.length) return;
-      var THREE = getTHREE();
-      if (!THREE || !THREE.Vector3) {
-        // fallback: clone camera.position supaya tipenya Vector3 asli
-        if (!SA._tmpO) {
-          try {
-            var g2 = G || game();
-            if (g2 && g2.camera && g2.camera.position) {
-              SA._tmpO = g2.camera.position.clone();
-              SA._tmpD = g2.camera.position.clone();
-            }
-          } catch (e) {}
-        }
-      }
       for (var i = 0; i < L.length; i++) {
         var b = L[i];
         if (!b || b.__sa || typeof b.hitTest !== 'function') continue;
         b.__sa = 1;
-        (function (b, f) {
-          b.hitTest = function (o, d, m) {
-            if (!SA.on) return f.call(this, o, d, m);
+        (function (bot, originalHitTest) {
+          bot.hitTest = function (o, d, m) {
+            if (!SA.on) return originalHitTest.call(this, o, d, m);
             try {
               var g2 = G || game();
-              if (!g2 || !g2.P || !g2.P.s) return f.call(this, o, d, m);
-              if (this.dead || !(this.hp > 0)) return f.call(this, o, d, m);
-              if (this.team === g2.P.s.team) return f.call(this, o, d, m);
+              if (!g2 || !g2.P || !g2.P.s) return originalHitTest.call(this, o, d, m);
+              if (this.dead || !(this.hp > 0)) return originalHitTest.call(this, o, d, m);
+              if (this.team === g2.P.s.team) return originalHitTest.call(this, o, d, m);
 
-              var hp = headPoint(this);
-              if (!hp) {
-                var bp = bodyPoint(this);
-                if (!bp) hp = headPointLogical(this);
-                else hp = bp;
+              // kalau bot ini BUKAN target SA, tapi bola mengenai target lain -> abaikan
+              // (biar hitTest natural tetap jalan untuk bot lain)
+              if (SA_HEAD.bot !== this) {
+                // tapi kalau origin adalah camera kita & SA lock aktif ke bot LAIN,
+                // kita tetap boleh return null supaya bullet tidak kena bot yang salah
+                // ... no, biarkan natural — target lock sudah dihandle di bawah
+                return originalHitTest.call(this, o, d, m);
               }
-              if (!hp) return f.call(this, o, d, m);
+
+              // bot ini adalah target SA — redirect
+              var curHp = getTargetPointLead(this, C);
+              if (!curHp) return originalHitTest.call(this, o, d, m);
+              SA_HEAD.x = curHp.x;
+              SA_HEAD.y = curHp.y;
+              SA_HEAD.z = curHp.z;
 
               var cam = g2.camera;
               var me = cam.matrixWorld.elements;
               var ox = me[12], oy = me[13], oz = me[14];
-              var dx = hp.x - ox, dy = hp.y - oy, dz = hp.z - oz;
-              var len = Math.sqrt(dx*dx + dy*dy + dz*dz);
-              if (len < 1) return f.call(this, o, d, m);
+              var tdx = SA_HEAD.x - ox;
+              var tdy = SA_HEAD.y - oy;
+              var tdz = SA_HEAD.z - oz;
+              var tlen = Math.sqrt(tdx*tdx + tdy*tdy + tdz*tdz);
+              if (tlen < 1) return originalHitTest.call(this, o, d, m);
 
-              // KUNCI: pakai Vector3 asli dari THREE, bukan plain object
+              var THREE = getTHREE();
               var no, nd;
               if (THREE && THREE.Vector3) {
                 no = new THREE.Vector3(ox, oy, oz);
-                nd = new THREE.Vector3(dx/len, dy/len, dz/len);
-              } else if (SA._tmpO && SA._tmpD) {
-                no = SA._tmpO.set(ox, oy, oz);
-                nd = SA._tmpD.set(dx/len, dy/len, dz/len);
+                nd = new THREE.Vector3(tdx/tlen, tdy/tlen, tdz/tlen);
               } else {
-                return f.call(this, o, d, m);
+                try {
+                  no = cam.position.clone(); no.set(ox, oy, oz);
+                  nd = cam.position.clone(); nd.set(tdx/tlen, tdy/tlen, tdz/tlen);
+                } catch (e) { return originalHitTest.call(this, o, d, m); }
               }
-
-              // tembak ke kepala target walau crosshair jauh
-              var r = f.call(this, no, nd, len + 1);
-              return r;
-            } catch (e) { return f.call(this, o, d, m); }
+              // pakai max distance = tlen + margin, wallbang handles dinding
+              var res = originalHitTest.call(this, no, nd, tlen + 2);
+              return res;
+            } catch (e) { return originalHitTest.call(this, o, d, m); }
           };
         })(b, b.hitTest);
       }
@@ -1665,7 +1732,7 @@
         var p = list[i];
         if (!p || !p.obj || !p.c || p === self) continue;
         if (p.team === my || p.dead || !(p.hp > 0)) continue;
-        var hp = headPoint(p) || headPointLogical(p); if (!hp) continue;
+        var hp = headPoint(p); if (!hp) continue;
         var t = trProj(cam, r, hp.x, hp.y, hp.z); if (!t) continue;
         if (t.x < r.left - 40 || t.x > r.left + r.width + 40) continue;
         if (t.y < r.top - 40 || t.y > r.top + r.height + 40) continue;
@@ -1689,6 +1756,7 @@
       instScope: function (on) { IS.on = on ? 1 : 0; return IS.on; },
       trig: function (on) { TB.on = on ? 1 : 0; return TB.on; },
       silent: function (on) { SA.on = on ? 1 : 0; saPatch(); return SA.on; },
+      silentFov: function (deg) { if (typeof deg === 'number' && deg > 0 && deg < 180) SA.fovRad = deg * Math.PI / 180; return SA.fovRad * 180 / Math.PI; },
       lob: function (on) { SL.on = on ? 1 : 0; return SL.on; },
       respawn: function (on) { IR.on = on ? 1 : 0; return IR.on; },
       radar: function (on) { RD.on = on ? 1 : 0; if (!on && RD.el) RD.el.style.display = 'none'; return RD.on; },
@@ -1706,25 +1774,28 @@
       st: function () {
         return {
           pred: PR.on, rapid: RF.on, fastReload: FR.on, instScope: IS.on,
-          trig: TB.on, silent: SA.on, lob: SL.on, respawn: IR.on,
+          trig: TB.on, silent: SA.on, silentFov: SA.fovRad * 180 / Math.PI, lob: SL.on, respawn: IR.on,
           radar: RD.on, hpo: HPO.on, fovc: FC.on, tracer: TR.on,
           wallbang: FL.wallbang, infAmmo: FL.infAmmo, noRecoil: FL.noRecoil,
           godmode: FL.godmode, noclip: FL.noclip, nadeAim: FL.nadeAim, antiKick: FL.antiKick,
-          aimbot: P.aimbotOn, smoothFire: SF.on
+          aimbot: P.aimbotOn, smoothFire: SF.on, bulletSpeed: P.bulletSpeed, leadFactor: P.leadFactor,
+          saHead: SA_HEAD.bot ? {
+            x: +SA_HEAD.x.toFixed(2),
+            y: +SA_HEAD.y.toFixed(2),
+            z: +SA_HEAD.z.toFixed(2),
+            name: SA_HEAD.bot.name,
+            hp: SA_HEAD.bot.hp
+          } : null
         };
       }
     };
     window.__pbx = PBX_API; HIDDEN.pbx = PBX_API;
 
-    // PR dideklarasikan setelah PBX_API dipakai, pindahkan deklarasi ke atas
-    // (fix hoisting: PR/RF sudah dideklarasikan sebelum PBX_API)
-    var PR = { on: 0, ms: 120 };
-
     (function pbxFrame() {
       requestAnimationFrame(pbxFrame);
       try {
         var g = G || game(); if (!g) return;
-        if (SA.on) saPatch();
+        if (SA.on) { saUpdateHead(g); saPatch(); }
         if (RD.on) rdDraw(g);
         if (TR.on) trDraw(g);
       } catch (e) {}
@@ -1748,12 +1819,10 @@
     var __gCheck = setInterval(function () {
       if (window.G) { log('window.G exposed ✓'); clearInterval(__gCheck); }
     }, 1000);
-    setTimeout(function () {
-      if (!window.G) log('window.G missing — gate patch may have failed');
-    }, 15000);
+    setTimeout(function () { if (!window.G) log('window.G missing — gate patch may have failed'); }, 15000);
 
     /* ============================================================
-       UI PANEL
+       UI
        ============================================================ */
     (function pbUI() {
       if (window.__pbUI) return;
@@ -1838,7 +1907,8 @@
         '.fk-foot{margin-top:6px;padding-top:5px;border-top:1px solid #eef1f4;font-size:9px;color:#8892a0;font-variant-numeric:tabular-nums}',
         '.fk-warn{margin-top:5px;padding:4px 6px;border-radius:5px;background:#fffbeb;border:1px solid #fcd34d;',
         '  color:#92400e;font-size:9px;line-height:1.25}',
-        '.fk-hint{font-size:9px;color:#a0aab5;line-height:1.25;padding:2px 0 3px}'
+        '.fk-hint{font-size:9px;color:#a0aab5;line-height:1.25;padding:2px 0 3px}',
+        '.fk-sa-tgt{font-size:9px;color:#10b981;padding:2px 6px;margin-top:3px;background:#ecfdf5;border-radius:4px;border:1px solid #6ee7b7}'
       ].join('');
 
       var style = document.createElement('style');
@@ -1931,7 +2001,7 @@
 
       var TAB_META = {
         aim:    { icon: 'fa-crosshairs',  label: 'AIM',    title: 'Aim Lock (legacy)' },
-        aimbot: { icon: 'fa-bullseye',    label: 'AIMBOT', title: 'Aimbot (snap saat fire, POV circle)' },
+        aimbot: { icon: 'fa-bullseye',    label: 'AIMBOT', title: 'Aimbot (snap saat fire)' },
         vis:    { icon: 'fa-eye',         label: 'ESP',    title: 'Visual ESP' },
         gacor:  { icon: 'fa-bolt',        label: 'GACOR',  title: 'Advanced' },
         misc:   { icon: 'fa-sliders',     label: 'MISC',   title: 'Misc' },
@@ -1976,37 +2046,34 @@
       /* AIM */
       var pAim = addTab('aim', 'AIM');
       pAim.appendChild(sec('fa-crosshairs', 'Mode Aim Lock'));
-      pAim.appendChild(el('div', 'fk-hint', 'Aim lock legacy: lock musuh di mana saja. Pakai Direct State Write (anti isTrusted).'));
+      pAim.appendChild(el('div', 'fk-hint', 'Aim lock legacy: lock musuh di mana saja. Presisi + lead prediction otomatis.'));
 
       pAim.appendChild(sec('fa-bullseye', 'Titik Tembak'));
       var hitboxSelect = el('select', 'fk-select');
-      hitboxSelect.innerHTML = '<option value="head">Head — kepala</option><option value="body">Body — badan</option><option value="nearest">Nearest — dekat crosshair</option>';
+      hitboxSelect.innerHTML = '<option value="head">Head — kepala (presisi)</option><option value="body">Body — badan (presisi)</option><option value="nearest">Nearest — terdekat ke kamera</option>';
       hitboxSelect.value = P.hitbox;
       hitboxSelect.addEventListener('change', function () { window.__pb.hitbox(this.value); });
       pAim.appendChild(hitboxSelect);
 
-      var headBiasS = slider(-0.3, 0.3, 0.01, P.headBias,
-        function (v) { return (v >= 0 ? '+' : '') + v.toFixed(2) + 'm'; },
-        function (v) { window.__pb.headBias(v); });
-      headBiasS.label.textContent = 'Head offset'; pAim.appendChild(headBiasS.node);
-      var bodyBiasS = slider(-0.3, 0.3, 0.01, P.bodyBias,
-        function (v) { return (v >= 0 ? '+' : '') + v.toFixed(2) + 'm'; },
-        function (v) { window.__pb.bodyBias(v); });
-      bodyBiasS.label.textContent = 'Body offset'; pAim.appendChild(bodyBiasS.node);
-      pAim.appendChild(el('div', 'fk-hint', 'Kalau aim masih meleset, geser Head offset (- turun, + naik).'));
+      pAim.appendChild(sec('fa-rocket', 'Lead Prediction'));
+      var bsS = slider(100, 800, 10, P.bulletSpeed, function (v) { return v.toFixed(0) + 'm/s'; }, function (v) { window.__pb.bulletSpeed(v); });
+      bsS.label.textContent = 'Bullet speed'; pAim.appendChild(bsS.node);
+      var lfS = slider(0, 2, 0.05, P.leadFactor, function (v) { return 'x' + v.toFixed(2); }, function (v) { window.__pb.leadFactor(v); });
+      lfS.label.textContent = 'Lead factor'; pAim.appendChild(lfS.node);
+      pAim.appendChild(el('div', 'fk-hint', 'Turunkan bullet speed kalau aimlock masih ketinggalan di target cepat. Naikkan lead factor kalau target jauh.'));
 
       pAim.appendChild(sec('fa-lock', 'Aim Lock'));
       var aimT = toggle(!!(window.__pb && window.__pb.state().aim), function (on) { if (on) window.__pb.on(); else window.__pb.off(); });
       pAim.appendChild(row('Aim lock', aimT.node, 'Auto-lock (legacy)'));
       var autoFireT = toggle(!!P.autoFire, function (on) { P.autoFire = on ? 1 : 0; });
-      pAim.appendChild(row('Auto fire', autoFireT.node, 'Tembak otomatis saat lock'));
+      pAim.appendChild(row('Auto fire', autoFireT.node, 'Tembak otomatis saat lock (klik kiri)'));
       var invertT = toggle(!!O.invert, function (on) { O.invert = on; });
       pAim.appendChild(row('Invert Y', invertT.node, 'Balik arah vertikal'));
 
       /* AIMBOT */
       var pAb = addTab('aimbot', 'AIMBOT');
       pAb.appendChild(sec('fa-bullseye', 'Aimbot (snap saat fire)'));
-      pAb.appendChild(el('div', 'fk-hint', 'Kamera tidak lock sebelum tembak. Snap saat fire. Hanya musuh di dalam POV circle.'));
+      pAb.appendChild(el('div', 'fk-hint', 'Snap saat fire + lead prediction. Snap speed lebih tinggi = lebih agresif lock.'));
       var aimbotT = toggle(!!P.aimbotOn, function (on) { window.__pb.aimbot(on); });
       pAb.appendChild(rowRisk('Enable aimbot', aimbotT.node, 'Snap saat fire'));
       var abGainS = slider(0.5, 3.0, 0.05, P.aimbotGain,
@@ -2054,10 +2121,17 @@
       pGac.appendChild(rowRisk('Prediction (lead)', predT.node, 'Aim ke depan'));
       var predS = slider(0, 400, 10, PR.ms, function (v) { return v.toFixed(0) + 'ms'; }, function (v) { PR.ms = v; if (PR.on) window.__pbx.pred(1, v); });
       predS.label.textContent = 'Lead time'; pGac.appendChild(predS.node);
+
+      pGac.appendChild(sec('fa-crosshairs', 'Silent Aim (auto-target)'));
+      pGac.appendChild(el('div', 'fk-hint', 'Aktifkan → tembak ke arah mana saja, selama musuh dalam FOV (default 120°) dan jarak <200m, peluru redirect ke kepala/target mereka. Wallbang WAJIB ON agar dinding tidak blok.'));
       var saT = toggle(!!SA.on, function (on) { window.__pbx.silent(on); });
-      pGac.appendChild(rowRisk('Silent aim', saT.node, 'Peluru ke kepala'));
+      pGac.appendChild(rowRisk('Silent aim', saT.node, 'Auto-target head, FOV besar'));
+      var saFovS = slider(30, 170, 5, SA.fovRad * 180 / Math.PI, function (v) { return v.toFixed(0) + '°'; }, function (v) { window.__pbx.silentFov(v); });
+      saFovS.label.textContent = 'Silent FOV'; pGac.appendChild(saFovS.node);
+      var saTgt = el('div', 'fk-sa-tgt', 'target: —');
+      pGac.appendChild(saTgt);
       var tbT = toggle(!!TB.on, function (on) { window.__pbx.trig(on); });
-      pGac.appendChild(rowRisk('Auto trigger', tbT.node, 'Tembak di musuh'));
+      pGac.appendChild(rowRisk('Auto trigger', tbT.node, 'Tembak otomatis saat silent aim lock'));
 
       pGac.appendChild(sec('fa-gun', 'Shooting'));
       var sfT = toggle(!!SF.on, function (on) { window.__pbx.smoothFire(on); });
@@ -2071,7 +2145,7 @@
 
       pGac.appendChild(sec('fa-shield-halved', 'Combat'));
       var wallT = toggle(!!FL.wallbang, function (on) { window.__pbx.wallbang(on); });
-      pGac.appendChild(rowRisk('Wallbang', wallT.node, 'Tembus dinding'));
+      pGac.appendChild(rowRisk('Wallbang', wallT.node, 'Tembus dinding (WAJIB untuk silent aim)'));
       var ammoT = toggle(!!FL.infAmmo, function (on) { window.__pbx.infAmmo(on); });
       pGac.appendChild(rowRisk('Infinite ammo', ammoT.node, 'Ammo tak habis'));
       var nrecT = toggle(!!FL.noRecoil, function (on) { window.__pbx.noRecoil(on); });
@@ -2114,7 +2188,7 @@
       pInfo.appendChild(sec('fa-key', 'Bypass'));
       var bypassInfo = el('div', null, '');
       bypassInfo.style.cssText = 'font-size:9px;line-height:1.4;color:#a0aab5';
-      bypassInfo.innerHTML = '<div>L1 preboot · flex gate</div><div>L1b integrity check bypass</div><div>L2 hide · L3 self-heal · L4 fp-rotate</div><div>L5 direct-state-write · L6 bone-accurate</div><div>V2.9: fire state & silent aim fix</div>';
+      bypassInfo.innerHTML = '<div>L1 preboot · flex gate</div><div>L1b integrity check bypass</div><div>L2 hide · L3 self-heal · L4 fp-rotate</div><div>L5 direct-state-write · L6 bone-accurate</div><div>V3.1: lead prediction + silent redirect</div>';
       pInfo.appendChild(bypassInfo);
       pInfo.appendChild(sec('fa-triangle-exclamation', 'Danger'));
       var resetBtn = el('div', 'fk-btn danger');
@@ -2133,7 +2207,9 @@
           window.__pb.aimbot(0);
           window.__pbvis.bone(0);
           window.__pb.hitbox('head');
-          window.__pb.headBias(0); window.__pb.bodyBias(0);
+          window.__pb.bulletSpeed(350);
+          window.__pb.leadFactor(1.0);
+          window.__pbx.silentFov(120);
           syncAll();
         } catch (e) {}
       });
@@ -2154,10 +2230,19 @@
           if (s2.lock) parts.push(s2.dist.toFixed(1) + 'm');
           if (s2.aimbotActive) parts.push('AB LOCK');
           foot.textContent = parts.join(' · ');
-          statBox.textContent = 'bots ' + s2.bots + ' · fire ' + s2.fire + ' · sens ' + s2.sens + ' · fov ' + s2.fov + ' · circle ' + s2.povCircleR.toFixed(0) + 'px';
+          statBox.textContent = 'bots ' + s2.bots + ' · fire ' + s2.fire + ' · sens ' + s2.sens + ' · bs ' + s2.bulletSpeed + 'm/s · lead x' + s2.leadFactor;
+
+          if (window.__pbx) {
+            var x2 = window.__pbx.st();
+            if (x2.saHead) {
+              saTgt.textContent = 'target: ' + x2.saHead.name + ' (' + Math.round(x2.saHead.hp) + 'hp)';
+            } else {
+              saTgt.textContent = SA.on ? 'target: — (cari musuh dalam FOV)' : 'target: off';
+            }
+          }
         } catch (e) { foot.textContent = '…'; }
       }
-      setInterval(refreshFoot, 500);
+      setInterval(refreshFoot, 300);
 
       function syncAll() {
         try {
@@ -2168,8 +2253,8 @@
             aimbotT.set(!!window.__pb.state().aimbot);
             abGainS.set(P.aimbotGain);
             abHoldS.set(P.aimbotHoldMs);
-            headBiasS.set(P.headBias);
-            bodyBiasS.set(P.bodyBias);
+            bsS.set(P.bulletSpeed);
+            lfS.set(P.leadFactor);
           }
           if (window.__pbvis) espT.set(!!window.__pbvis.is());
           if (window.__pbqc) { var q = window.__pbqc.st(); qcT.set(!!q.on); qcFastT.set(!!q.fast); }
@@ -2183,6 +2268,7 @@
             wallT.set(!!x.wallbang); ammoT.set(!!x.infAmmo); nrecT.set(!!x.noRecoil);
             godT.set(!!x.godmode); ncT.set(!!x.noclip); nadeT.set(!!x.nadeAim); akT.set(!!x.antiKick);
             sfT.set(!!x.smoothFire);
+            saFovS.set(x.silentFov);
           }
         } catch (e) {}
       }
