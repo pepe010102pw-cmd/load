@@ -10,7 +10,7 @@
 
   var PF_LOCAL_KEYS = [
     'IRILMODZPREMIUM','A','AKR','IRIL-EFGH-5678','IRIL-IJKL-9012',
-    'my key 123','B','EXPIREDTGGL7','I'
+    'my key 123','d','EXPIREDTGGL7','I'
   ];
 
   function pfGet(k, d) { try { var v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } }
