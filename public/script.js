@@ -9,8 +9,8 @@
   var PF_CACHE_MS  = 1 * 3600 * 1000;
 
   var PF_LOCAL_KEYS = [
-    'IRILMODZPREMIUM','PREMIUM3DAY','AKBAR','IRIL-EFGH-5678','IRIL-IJKL-9012',
-    'my key 123','IRILMODZPREMIUM7DAY','EXPIREDTGGL7','IRILMODZ7DAY'
+    'IRILMODZPREMIUM','A','AKR','IRIL-EFGH-5678','IRIL-IJKL-9012',
+    'my key 123','B','EXPIREDTGGL7','I'
   ];
 
   function pfGet(k, d) { try { var v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } }
@@ -125,37 +125,6 @@
     var BRAND = 'iRiLLL MODZ';
     function log() { try { console.log.apply(console, ['[iR]'].concat([].slice.call(arguments))); } catch (e) {} }
 
-    /* ============================================================
-       PERSIST ENGINE — simpan & load SEMUA state toggle/slider
-       ============================================================ */
-    var PERSIST_KEY = 'ir_ui_state_v1';
-    var __persist = { data: {}, enabled: 0 };
-
-    function persistLoad() {
-      try {
-        var raw = localStorage.getItem(PERSIST_KEY);
-        if (!raw) return;
-        var d = JSON.parse(raw);
-        if (d && typeof d === 'object') __persist.data = d;
-      } catch (e) { __persist.data = {}; }
-    }
-    function persistSave() {
-      if (!__persist.enabled) return;
-      try { localStorage.setItem(PERSIST_KEY, JSON.stringify(__persist.data)); } catch (e) {}
-    }
-    function persistSet(k, v) {
-      if (!__persist.enabled) return;
-      __persist.data[k] = v;
-      persistSave();
-    }
-    function persistGet(k, d) {
-      return (k in __persist.data) ? __persist.data[k] : d;
-    }
-    persistLoad();
-
-    /* ============================================================
-       PREBOOT (tidak diubah)
-       ============================================================ */
     (function preboot() {
       try {
         if (!/\/jogo|game\.html/.test(location.pathname)) return;
@@ -260,9 +229,6 @@
 
     var HIDDEN = { pb: null, pbvis: null, pbnade: null, pbqc: null, pbx: null };
 
-    /* ============================================================
-       PARAMS — semua default OFF (0/false), sesuai request
-       ============================================================ */
     var P = {
       cone: 0.65, reach: 200, autoFire: 0, gain: 0.9, mode: 'near', bias: 0.35,
       aimMode: 'pov', povCircleR: 220,
@@ -287,23 +253,22 @@
     readOpts();
     try { addEventListener('pbopts', function () { readOpts(); }); } catch (e) {}
 
-    /* Load individual keys — tapi SEMUA default OFF / tidak ada save = OFF */
     try {
-      var _pr = parseFloat(persistGet('povCircleR', NaN));
+      var _pr = parseFloat(localStorage.getItem('ir_povcirc'));
       if (isFinite(_pr) && _pr >= 1) P.povCircleR = _pr;
-      var _hb = persistGet('hitbox', null);
+      var _hb = localStorage.getItem('ir_hitbox');
       if (_hb === 'head' || _hb === 'body' || _hb === 'nearest') P.hitbox = _hb;
-      var _ab = persistGet('aimbotOn', null);
-      if (_ab === 1 || _ab === 0) P.aimbotOn = _ab;
-      var _abg = parseFloat(persistGet('aimbotGain', NaN));
+      var _ab = localStorage.getItem('ir_aimbot');
+      if (_ab === '1' || _ab === '0') P.aimbotOn = +_ab;
+      var _abg = parseFloat(localStorage.getItem('ir_aimbot_gain'));
       if (isFinite(_abg) && _abg > 0) P.aimbotGain = _abg;
-      var _abh = parseFloat(persistGet('aimbotHoldMs', NaN));
+      var _abh = parseFloat(localStorage.getItem('ir_aimbot_hold'));
       if (isFinite(_abh) && _abh >= 50) P.aimbotHoldMs = _abh;
-      var _bs = parseFloat(persistGet('bulletSpeed', NaN));
+      var _bs = parseFloat(localStorage.getItem('ir_bullet_speed'));
       if (isFinite(_bs) && _bs > 0) P.bulletSpeed = _bs;
-      var _lf = parseFloat(persistGet('leadFactor', NaN));
+      var _lf = parseFloat(localStorage.getItem('ir_lead'));
       if (isFinite(_lf) && _lf >= 0) P.leadFactor = _lf;
-      var _lm = persistGet('lockMode', null);
+      var _lm = localStorage.getItem('ir_lockmode');
       if (_lm === 'legacy' || _lm === 'pov') P.lockMode = _lm;
     } catch (e) {}
 
@@ -311,7 +276,7 @@
     var lastPick = null, st = { v: V, aim: false, G: false, bots: 0, enemies: 0, lock: 0, err: 0, fire: 0, dist: 0, hitbox: P.hitbox, aimbot: 0, lead: 0, lockMode: P.lockMode };
 
     var AB = { lockUntil: 0, target: null, lastShot: 0, freshFire: 0 };
-    var SF = { on: 0 };
+    var SF = { on: 0 }; // Default OFF
 
     var AIM = { dx: 0, dy: 0, queued: false };
     var AIMLOCK = { on: false, targetYaw: 0, targetPitch: 0, locked: false };
@@ -610,9 +575,6 @@
     addEventListener('touchend', touchEnd, true);
     addEventListener('touchcancel', touchEnd, true);
 
-    /* ============================================================
-       FEATURE FLAGS — semua default OFF
-       ============================================================ */
     var FL = {
       wallbang: 0, infAmmo: 0, noRecoil: 0, godmode: 0, noclip: 0,
       antiKick: 0, noFall: 0,
@@ -920,7 +882,7 @@
     }
     try { requestAnimationFrame(snBypassTick); } catch (e) {}
 
-    var NG = { on: 1, max: 99, lastLog: 0, count: 0 };
+    var NG = { on: 0, max: 99, lastLog: 0, count: 0 };
     function nadeTick() {
       if (!FL.infNade) return;
       var g = G || game();
@@ -1058,7 +1020,9 @@
         st.err = bestA; st.dist = bestD; st.lock = 1; lastPick = best;
       }
 
-      if (!(P.autoFire || fireHeld) || now < nextTap || holding) {
+      // [PERBAIKAN BUG AUTO FIRE]: Hanya boleh menembak jika autoFire aktif ATAU fireHeld ditekan manual
+      var canShootTrigger = (P.autoFire || fireHeld > 0);
+      if (!canShootTrigger || now < nextTap || holding) {
         if (P.aimbotOn && fireHeld > 0) AB.lastShot = now;
         aimFlush(g);
         return;
@@ -1085,7 +1049,7 @@
       aimFlush(g);
     }
 
-    setInterval(function () { try { var g = G || game(); if (g) aimFlush(g); } catch (e) {} }, 8);
+    setInterval(function () { try { var g = G || game(); if (g) aimFlush(g); } catch (e) {} }, 16);
 
     setInterval(function () {
       try {
@@ -1094,12 +1058,9 @@
         if (v === 1) { aimOn = true; st.aim = true; buzz([20, 40, 20]); }
         else if (v === -1) { aimOn = false; st.aim = false; up(); buzz(60); }
       } catch (e) {}
-    }, 120);
-    setInterval(function () { if (!G) { G = game(); if (G) { st.G = true; log('G late unlock'); } } }, 500);
+    }, 250);
+    setInterval(function () { if (!G) { G = game(); if (G) { st.G = true; log('G late unlock'); } } }, 1000);
 
-    /* ============================================================
-       PERSIST WRAPPERS untuk API (auto-save saat user ubah)
-       ============================================================ */
     var PB_API = {
       state: function () {
         return {
@@ -1114,16 +1075,15 @@
         };
       },
       cfg: function (o) { if (o) for (var k in o) if (k in P) P[k] = o[k]; return P; },
-      on: function () { aimOn = true; st.aim = true; persistSet('aimOn', 1); return 'on'; },
-      off: function () { aimOn = false; st.aim = false; AIMLOCK.locked = false; up(); persistSet('aimOn', 0); return 'off'; },
+      on: function () { aimOn = true; st.aim = true; return 'on'; },
+      off: function () { aimOn = false; st.aim = false; AIMLOCK.locked = false; up(); return 'off'; },
       aimMode: function (mode) { P.aimMode = 'pov'; try { localStorage.setItem('ir_aimmode', 'pov'); } catch (e) {} return P.aimMode; },
-      povCircle: function (v) { if (typeof v === 'number' && v >= 1) { P.povCircleR = v; try { localStorage.setItem('ir_povcirc', String(v)); } catch (e) {} persistSet('povCircleR', v); } return P.povCircleR; },
-      hitbox: function (v) { if (v === 'head' || v === 'body' || v === 'nearest') { P.hitbox = v; st.hitbox = v; try { localStorage.setItem('ir_hitbox', v); } catch (e) {} persistSet('hitbox', v); } return P.hitbox; },
+      povCircle: function (v) { if (typeof v === 'number' && v >= 1) { P.povCircleR = v; try { localStorage.setItem('ir_povcirc', String(v)); } catch (e) {} } return P.povCircleR; },
+      hitbox: function (v) { if (v === 'head' || v === 'body' || v === 'nearest') { P.hitbox = v; st.hitbox = v; try { localStorage.setItem('ir_hitbox', v); } catch (e) {} } return P.hitbox; },
       lockMode: function (m) {
         if (m === 'legacy' || m === 'pov') {
           P.lockMode = m; st.lockMode = m;
           try { localStorage.setItem('ir_lockmode', m); } catch (e) {}
-          persistSet('lockMode', m);
           AIMLOCK.locked = false;
           _losCache = new WeakMap();
           _povCache = new WeakMap();
@@ -1136,13 +1096,12 @@
         if (!P.aimbotOn) { AB.target = null; AIMLOCK.locked = false; }
         _aimbotLosCache = new WeakMap();
         try { localStorage.setItem('ir_aimbot', P.aimbotOn ? '1' : '0'); } catch (e) {}
-        persistSet('aimbotOn', P.aimbotOn);
         return P.aimbotOn;
       },
-      aimbotGain: function (v) { if (typeof v === 'number' && v > 0) { P.aimbotGain = v; try { localStorage.setItem('ir_aimbot_gain', String(v)); } catch (e) {} persistSet('aimbotGain', v); } return P.aimbotGain; },
-      aimbotHold: function (v) { if (typeof v === 'number' && v >= 50) { P.aimbotHoldMs = v; try { localStorage.setItem('ir_aimbot_hold', String(v)); } catch (e) {} persistSet('aimbotHoldMs', v); } return P.aimbotHoldMs; },
-      bulletSpeed: function (v) { if (typeof v === 'number' && v > 0) { P.bulletSpeed = v; try { localStorage.setItem('ir_bullet_speed', String(v)); } catch (e) {} persistSet('bulletSpeed', v); } return P.bulletSpeed; },
-      leadFactor: function (v) { if (typeof v === 'number' && v >= 0) { P.leadFactor = v; try { localStorage.setItem('ir_lead', String(v)); } catch (e) {} persistSet('leadFactor', v); } return P.leadFactor; },
+      aimbotGain: function (v) { if (typeof v === 'number' && v > 0) { P.aimbotGain = v; try { localStorage.setItem('ir_aimbot_gain', String(v)); } catch (e) {} } return P.aimbotGain; },
+      aimbotHold: function (v) { if (typeof v === 'number' && v >= 50) { P.aimbotHoldMs = v; try { localStorage.setItem('ir_aimbot_hold', String(v)); } catch (e) {} } return P.aimbotHoldMs; },
+      bulletSpeed: function (v) { if (typeof v === 'number' && v > 0) { P.bulletSpeed = v; try { localStorage.setItem('ir_bullet_speed', String(v)); } catch (e) {} } return P.bulletSpeed; },
+      leadFactor: function (v) { if (typeof v === 'number' && v >= 0) { P.leadFactor = v; try { localStorage.setItem('ir_lead', String(v)); } catch (e) {} } return P.leadFactor; },
       list: function () {
         var g = game(); if (!g) return 'no G';
         return (g.bots || []).map(function (p) {
@@ -1363,7 +1322,7 @@
           if (!eInit()) {} else if (!g) { eClear(); } else { try { eDraw(g); } catch (err) { eClear(); } }
         }
       }
-      if (g && now - _beLast > 33) { _beLast = now; try { beDraw(g); } catch (e) { beClear(); } }
+      if (g && now - _beLast > 50) { _beLast = now; try { beDraw(g); } catch (e) { beClear(); } }
     }
     try { requestAnimationFrame(eFrame); } catch (e) {}
 
@@ -1379,13 +1338,13 @@
     }
 
     var VIS_API = {
-      on: function () { E.on = 1; persistSet('espOn', 1); return 'on'; },
-      off: function () { E.on = 0; eClear(); persistSet('espOn', 0); return 'off'; },
+      on: function () { E.on = 1; return 'on'; },
+      off: function () { E.on = 0; eClear(); return 'off'; },
       is: function () { return E.on; },
-      name: function (on) { E.nameOn = on ? 1 : 0; persistSet('espName', E.nameOn); if (!on) { for (var i = 0; i < E.slots.length; i++) if (E.slots[i].name) E.slots[i].name.style.display = 'none'; } return E.nameOn; },
+      name: function (on) { E.nameOn = on ? 1 : 0; if (!on) { for (var i = 0; i < E.slots.length; i++) if (E.slots[i].name) E.slots[i].name.style.display = 'none'; } return E.nameOn; },
       nameOn: function () { return E.nameOn; },
-      dmg: function (m) { if (typeof m === 'number' && m >= 1 && m <= 3) { DM.mult = m; persistSet('dmgMult', m); } return DM.mult; },
-      bone: function (on, range) { BE.on = on ? 1 : 0; if (typeof range === 'number') BE.range = range; if (!on) beClear(); persistSet('boneOn', BE.on); if (typeof range === 'number') persistSet('boneRange', BE.range); return { on: BE.on, range: BE.range }; },
+      dmg: function (m) { if (typeof m === 'number' && m >= 1 && m <= 3) DM.mult = m; return DM.mult; },
+      bone: function (on, range) { BE.on = on ? 1 : 0; if (typeof range === 'number') BE.range = range; if (!on) beClear(); return { on: BE.on, range: BE.range }; },
       ammo: function () {
         var g = G || game(); if (!g || !g.P) return null;
         var p = g.P, w = null; try { w = p.W; } catch (e) {}
@@ -1620,9 +1579,9 @@
     try { requestAnimationFrame(qcTick); } catch (e) {}
 
     var QC_API = {
-      cfg: function (o) { if (o) for (var k in o) if (k === 'on' || k === 'fast') { QC[k] = o[k]; persistSet('qc_' + k, QC[k]); } return { on: QC.on, fast: QC.fast }; },
-      on: function () { QC.on = 1; persistSet('qcOn', 1); return 'on'; },
-      off: function () { QC.on = 0; persistSet('qcOn', 0); return 'off'; },
+      cfg: function (o) { if (o) for (var k in o) if (k === 'on' || k === 'fast') QC[k] = o[k]; return { on: QC.on, fast: QC.fast }; },
+      on: function () { QC.on = 1; return 'on'; },
+      off: function () { QC.on = 0; return 'off'; },
       swap: function () { qcTap('KeyQ'); return 'swap'; },
       st: function () { var g = G || game(), p = g && g.P, w = p && qcW(p, p.slot); return { v: V, on: QC.on, slot: p && p.slot, w: w && w.name, shots: QC.n, swaps: QC.sw, fast: QC.fast }; }
     };
@@ -1840,7 +1799,7 @@
       if (!RD.on) { if (RD.el) RD.el.style.display = 'none'; return; }
       if (!rdInit()) return;
       RD.el.style.display = 'block';
-      var now = performance.now(); if (now - RD.last < 50) return;
+      var now = performance.now(); if (now - RD.last < 100) return;
       RD.last = now;
       var s = g.P && g.P.s; if (!s || !s.mover || !s.mover.pos) return;
       var sx = s.mover.pos.x, sz = s.mover.pos.z;
@@ -1991,40 +1950,39 @@
     }
 
     var PBX_API = {
-      pred: function (on, ms) { PR.on = on ? 1 : 0; if (typeof ms === 'number') PR.ms = ms; persistSet('predOn', PR.on); persistSet('predMs', PR.ms); return { on: PR.on, ms: PR.ms }; },
-      rapid: function (on) { RF.on = on ? 1 : 0; persistSet('rapidOn', RF.on); return RF.on; },
-      instScope: function (on) { IS.on = on ? 1 : 0; persistSet('instScopeOn', IS.on); return IS.on; },
-      trig: function (on) { TB.on = on ? 1 : 0; persistSet('trigOn', TB.on); return TB.on; },
-      silent: function (on) { SA.on = on ? 1 : 0; saPatch(); persistSet('silentOn', SA.on); return SA.on; },
-      silentFov: function (deg) { if (typeof deg === 'number' && deg > 0 && deg < 180) { SA.fovRad = deg * Math.PI / 180; persistSet('silentFov', deg); } return SA.fovRad * 180 / Math.PI; },
-      lob: function (on) { SL.on = on ? 1 : 0; persistSet('lobOn', SL.on); return SL.on; },
-      respawn: function (on) { IR.on = on ? 1 : 0; persistSet('respawnOn', IR.on); return IR.on; },
-      radar: function (on) { RD.on = on ? 1 : 0; persistSet('radarOn', RD.on); if (!on && RD.el) RD.el.style.display = 'none'; return RD.on; },
-      hpo: function (on) { HPO.on = on ? 1 : 0; persistSet('hpoOn', HPO.on); return HPO.on; },
-      fovc: function (on) { FC.on = on ? 1 : 0; persistSet('fovcOn', FC.on); return FC.on; },
-      tracer: function (on) { TR.on = on ? 1 : 0; persistSet('tracerOn', TR.on); if (!on) trClear(); return TR.on; },
-      wallbang: function (on) { FL.wallbang = on ? 1 : 0; persistSet('wallbang', FL.wallbang); return FL.wallbang; },
-      infAmmo: function (on) { FL.infAmmo = on ? 1 : 0; persistSet('infAmmo', FL.infAmmo); return FL.infAmmo; },
-      noRecoil: function (on) { FL.noRecoil = on ? 1 : 0; persistSet('noRecoil', FL.noRecoil); return FL.noRecoil; },
-      godmode: function (on) { FL.godmode = on ? 1 : 0; persistSet('godmode', FL.godmode); return FL.godmode; },
+      pred: function (on, ms) { PR.on = on ? 1 : 0; if (typeof ms === 'number') PR.ms = ms; return { on: PR.on, ms: PR.ms }; },
+      rapid: function (on) { RF.on = on ? 1 : 0; return RF.on; },
+      instScope: function (on) { IS.on = on ? 1 : 0; return IS.on; },
+      trig: function (on) { TB.on = on ? 1 : 0; return TB.on; },
+      silent: function (on) { SA.on = on ? 1 : 0; saPatch(); return SA.on; },
+      silentFov: function (deg) { if (typeof deg === 'number' && deg > 0 && deg < 180) SA.fovRad = deg * Math.PI / 180; return SA.fovRad * 180 / Math.PI; },
+      lob: function (on) { SL.on = on ? 1 : 0; return SL.on; },
+      respawn: function (on) { IR.on = on ? 1 : 0; return IR.on; },
+      radar: function (on) { RD.on = on ? 1 : 0; if (!on && RD.el) RD.el.style.display = 'none'; return RD.on; },
+      hpo: function (on) { HPO.on = on ? 1 : 0; return HPO.on; },
+      fovc: function (on) { FC.on = on ? 1 : 0; return FC.on; },
+      tracer: function (on) { TR.on = on ? 1 : 0; if (!on) trClear(); return TR.on; },
+      wallbang: function (on) { FL.wallbang = on ? 1 : 0; return FL.wallbang; },
+      infAmmo: function (on) { FL.infAmmo = on ? 1 : 0; return FL.infAmmo; },
+      noRecoil: function (on) { FL.noRecoil = on ? 1 : 0; return FL.noRecoil; },
+      godmode: function (on) { FL.godmode = on ? 1 : 0; return FL.godmode; },
       noclip: function (on) {
         FL.noclip = on ? 1 : 0;
         if (!FL.noclip) ncUninstall(); else ncInstall();
-        persistSet('noclip', FL.noclip);
         return FL.noclip;
       },
-      antiKick: function (on) { FL.antiKick = on ? 1 : 0; persistSet('antiKick', FL.antiKick); return FL.antiKick; },
-      smoothFire: function (on) { SF.on = on ? 1 : 0; persistSet('smoothFire', SF.on); return SF.on; },
+      antiKick: function (on) { FL.antiKick = on ? 1 : 0; return FL.antiKick; },
+      smoothFire: function (on) { SF.on = on ? 1 : 0; return SF.on; },
 
-      fly: function (on) { var r = flyToggle(on); persistSet('flyOn', FLY.on); return r; },
-      flyMode: function (m) { if (m === 'jump' || m === 'hover') { FLY.mode = m; persistSet('flyMode', m); } return FLY.mode; },
+      fly: function (on) { return flyToggle(on); },
+      flyMode: function (m) { if (m === 'jump' || m === 'hover') FLY.mode = m; return FLY.mode; },
       flySt: function () { return { on: FLY.on, mode: FLY.mode, jump: FLY.jumpHeld }; },
-      flyBypass: function (on) { FLYB.on = on ? 1 : 0; persistSet('flyBypass', FLYB.on); return FLYB.on; },
+      flyBypass: function (on) { FLYB.on = on ? 1 : 0; return FLYB.on; },
 
-      noFall: function (on) { FL.noFall = on ? 1 : 0; persistSet('noFall', FL.noFall); return FL.noFall; },
+      noFall: function (on) { FL.noFall = on ? 1 : 0; return FL.noFall; },
 
-      infNade: function (on) { FL.infNade = on ? 1 : 0; persistSet('infNade', FL.infNade); return FL.infNade; },
-      infNadeMax: function (n) { if (typeof n === 'number' && n >= 1 && n <= 999) { FL.infNadeMax = n | 0; persistSet('infNadeMax', FL.infNadeMax); } return FL.infNadeMax; },
+      infNade: function (on) { FL.infNade = on ? 1 : 0; return FL.infNade; },
+      infNadeMax: function (n) { if (typeof n === 'number' && n >= 1 && n <= 999) FL.infNadeMax = n | 0; return FL.infNadeMax; },
       infNadeSt: function () {
         var g = G || game();
         var out = { on: FL.infNade, max: FL.infNadeMax, count: NG.count, grenades: [] };
@@ -2040,10 +1998,10 @@
         return out;
       },
 
-      silentNade: function (on) { SN.on = on ? 1 : 0; persistSet('silentNade', SN.on); return SN.on; },
-      silentNadeHoming: function (on) { SN.homing = on ? 1 : 0; persistSet('silentNadeHoming', SN.homing); return SN.homing; },
-      silentNadeLOS: function (on) { SN.requireLOS = on ? 1 : 0; persistSet('silentNadeLOS', SN.requireLOS); return SN.requireLOS; },
-      silentNadeBypass: function (on) { SNB.on = on ? 1 : 0; persistSet('silentNadeBypass', SNB.on); return SNB.on; },
+      silentNade: function (on) { SN.on = on ? 1 : 0; return SN.on; },
+      silentNadeHoming: function (on) { SN.homing = on ? 1 : 0; return SN.homing; },
+      silentNadeLOS: function (on) { SN.requireLOS = on ? 1 : 0; return SN.requireLOS; },
+      silentNadeBypass: function (on) { SNB.on = on ? 1 : 0; return SNB.on; },
       silentNadeSt: function () {
         return {
           on: SN.on,
@@ -2093,98 +2051,8 @@
           saPatch();
         }
         if (RD.on) rdDraw(g);
-        if (TR.on && now - _trLast > 33) { _trLast = now; trDraw(g); }
+        if (TR.on && now - _trLast > 50) { _trLast = now; trDraw(g); }
       } catch (e) {}
-    })();
-
-    /* ============================================================
-       LOAD SEMUA STATE DARI PERSIST — setelah API ada
-       ============================================================ */
-    (function loadPersistedState() {
-      try {
-        __persist.enabled = 1; // aktifkan save dari sini
-
-        // AIM
-        var aimOnSaved = persistGet('aimOn', 0);
-        if (aimOnSaved === 1) { aimOn = true; st.aim = true; }
-
-        // AIMBOT / POV / dll sudah di-load di atas via individual keys
-        // tapi kita sync juga dari persist utama
-        if (P.aimbotOn) { try { localStorage.setItem('ir_aimbot', '1'); } catch (e) {} }
-
-        // ESP
-        if (persistGet('espOn', 0) === 1) E.on = 1;
-        E.nameOn = persistGet('espName', 0) ? 1 : 0;
-
-        // Bone ESP
-        BE.on = persistGet('boneOn', 0) ? 1 : 0;
-        var br = parseInt(persistGet('boneRange', 60), 10);
-        if (isFinite(br)) BE.range = br;
-
-        // DMG multiplier
-        var dm = parseFloat(persistGet('dmgMult', 1.3));
-        if (isFinite(dm) && dm >= 1 && dm <= 3) DM.mult = dm;
-
-        // Silent aim
-        SA.on = persistGet('silentOn', 0) ? 1 : 0;
-        var sfv = parseFloat(persistGet('silentFov', 60));
-        if (isFinite(sfv) && sfv > 0 && sfv < 180) SA.fovRad = sfv * Math.PI / 180;
-
-        // Trig
-        TB.on = persistGet('trigOn', 0) ? 1 : 0;
-
-        // Prediction
-        PR.on = persistGet('predOn', 0) ? 1 : 0;
-        var pms = parseFloat(persistGet('predMs', 120));
-        if (isFinite(pms)) PR.ms = pms;
-
-        // Rapid / instScope
-        RF.on = persistGet('rapidOn', 0) ? 1 : 0;
-        IS.on = persistGet('instScopeOn', 0) ? 1 : 0;
-
-        // Respawn / radar / hpo / fovc / tracer
-        IR.on = persistGet('respawnOn', 0) ? 1 : 0;
-        RD.on = persistGet('radarOn', 0) ? 1 : 0;
-        HPO.on = persistGet('hpoOn', 0) ? 1 : 0;
-        FC.on = persistGet('fovcOn', 0) ? 1 : 0;
-        TR.on = persistGet('tracerOn', 0) ? 1 : 0;
-
-        // Combat
-        FL.wallbang = persistGet('wallbang', 0) ? 1 : 0;
-        FL.infAmmo = persistGet('infAmmo', 0) ? 1 : 0;
-        FL.noRecoil = persistGet('noRecoil', 0) ? 1 : 0;
-        FL.godmode = persistGet('godmode', 0) ? 1 : 0;
-        FL.noclip = persistGet('noclip', 0) ? 1 : 0;
-        FL.antiKick = persistGet('antiKick', 0) ? 1 : 0;
-        FL.noFall = persistGet('noFall', 0) ? 1 : 0;
-        SF.on = persistGet('smoothFire', 0) ? 1 : 0;
-
-        // Fly
-        FLY.on = persistGet('flyOn', 0) ? 1 : 0;
-        var fmod = persistGet('flyMode', 'jump');
-        if (fmod === 'jump' || fmod === 'hover') FLY.mode = fmod;
-        FLYB.on = persistGet('flyBypass', 0) ? 1 : 0;
-
-        // Nade
-        FL.infNade = persistGet('infNade', 0) ? 1 : 0;
-        var inm = parseInt(persistGet('infNadeMax', 99), 10);
-        if (isFinite(inm) && inm >= 1 && inm <= 999) FL.infNadeMax = inm;
-        SN.on = persistGet('silentNade', 0) ? 1 : 0;
-        SN.homing = persistGet('silentNadeHoming', 0) ? 1 : 0;
-        SN.requireLOS = persistGet('silentNadeLOS', 0) ? 1 : 0;
-        SNB.on = persistGet('silentNadeBypass', 0) ? 1 : 0;
-
-        // QC
-        QC.on = persistGet('qcOn', 0) ? 1 : 0;
-        QC.fast = persistGet('qc_fast', 0) ? 1 : 0;
-
-        // Noclip install kalau perlu
-        if (FL.noclip) { try { ncInstall(); } catch (e) {} }
-        // Apply fly groundY kalau FLY.on tapi belum ada G — biar flyTick yg handle nanti
-        if (FLY.on) { try { ms('Fly ON (restored)'); } catch (e) {} }
-
-        log('[Persist] loaded', Object.keys(__persist.data).length, 'keys');
-      } catch (e) { log('[Persist] load fail', e); }
     })();
 
     (function hideAPIs() {
@@ -2208,7 +2076,7 @@
     setTimeout(function () { if (!window.G) log('window.G missing — gate patch may have failed'); }, 15000);
 
     /* ============================================================
-       UI
+       UI & FPS REALTIME MONITOR + HIDE UI (FA-ICON TRANSPARAN KECIL)
        ============================================================ */
     (function pbUI() {
       if (window.__pbUI) return;
@@ -2241,7 +2109,7 @@
         '.fk.collapsed{width:auto}',
         '.fk.collapsed .fk-rail{display:none}',
         '.fk.collapsed .fk-body-col{display:none}',
-        '.fk.collapsed .fk-tabbar{display:flex;align-items:center;gap:6px;padding:5px 9px;background:#fafbfc;border-radius:10px}',
+        '.fk.collapsed .fk-tabbar{display:flex;align-items:center;gap:6px;padding:5px 9px;background:#fafbfc;border-radius:10px;cursor:move}',
         '.fk.collapsed .fk-tb-title{font:800 11px/1 system-ui,Tahoma,sans-serif;color:#0f172a;letter-spacing:.5px;white-space:nowrap}',
         '.fk.collapsed .fk-tb-title .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#7c3aed;margin-right:5px;vertical-align:middle}',
         '.fk-tabbar .fk-tb-open{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;',
@@ -2258,7 +2126,8 @@
         '.fk-h .dot{width:7px;height:7px;border-radius:50%;background:#7c3aed;flex:0 0 7px}',
         '.fk-h .title{font-size:12px;color:#0f172a;letter-spacing:.4px}',
         '.fk-h .v{opacity:.7;font-weight:400;font-size:9px;margin-left:auto;color:#8892a0}',
-        '.fk-toggle{cursor:pointer;margin-left:4px;color:#fff;border-radius:4px;',
+        '.fk-toggle-group{display:flex;gap:4px;margin-left:4px}',
+        '.fk-toggle{cursor:pointer;color:#fff;border-radius:4px;',
         '  width:20px;height:20px;display:flex;align-items:center;justify-content:center;flex:0 0 20px;font-size:10px;background:#7c3aed}',
         '.fk-toggle:hover{background:#6d28d9}',
         '.fk-body{padding:6px 9px 9px;max-height:60vh;overflow:auto;background:#fff}',
@@ -2299,7 +2168,10 @@
         '.fk-warn{margin-top:5px;padding:4px 6px;border-radius:5px;background:#fffbeb;border:1px solid #fcd34d;',
         '  color:#92400e;font-size:9px;line-height:1.25}',
         '.fk-sa-tgt{font-size:9px;color:#10b981;padding:2px 6px;margin-top:3px;background:#ecfdf5;border-radius:4px;border:1px solid #6ee7b7}',
-        '.fk-nade-st{font-size:9px;color:#7c3aed;padding:2px 6px;margin-top:3px;background:#f5f3ff;border-radius:4px;border:1px solid #c4b5fd;line-height:1.35}'
+        '.fk-nade-st{font-size:9px;color:#7c3aed;padding:2px 6px;margin-top:3px;background:#f5f3ff;border-radius:4px;border:1px solid #c4b5fd;line-height:1.35}',
+        '#ir-fps-ms{position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:2147483605;background:rgba(0,0,0,0.6);color:#00ffcc;padding:3px 8px;border-radius:6px;font:700 11px monospace;pointer-events:none;box-shadow:0 2px 6px rgba(0,0,0,0.3)}',
+        '#ir-float-eye{position:fixed;top:8px;right:8px;z-index:2147483606;background:rgba(124,58,237,0.20);color:rgba(255,255,255,0.75);width:28px;height:28px;border-radius:50%;display:none;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.25);font-size:11px;transition:all .15s}',
+        '#ir-float-eye:hover{background:rgba(124,58,237,0.7);color:#fff}'
       ].join('');
 
       var style = document.createElement('style');
@@ -2307,22 +2179,58 @@
       style.textContent = css;
       (document.head || document.documentElement).appendChild(style);
 
+      var fpsMsEl = document.createElement('div');
+      fpsMsEl.id = 'ir-fps-ms';
+      fpsMsEl.textContent = 'FPS: 60';
+      (document.body || document.documentElement).appendChild(fpsMsEl);
+
+      var floatEye = document.createElement('div');
+      floatEye.id = 'ir-float-eye';
+      floatEye.innerHTML = '<i class="fa-solid fa-eye"></i>';
+      floatEye.title = 'Tampilkan Menu';
+      (document.body || document.documentElement).appendChild(floatEye);
+
+      var frameCount = 0, lastFpsUpdate = performance.now(), currentFps = 60;
+      function fpsLoop(now) {
+        frameCount++;
+        if (now - lastFpsUpdate >= 500) {
+          currentFps = Math.round((frameCount * 1000) / (now - lastFpsUpdate));
+          frameCount = 0;
+          lastFpsUpdate = now;
+          fpsMsEl.textContent = 'FPS: ' + currentFps;
+        }
+        requestAnimationFrame(fpsLoop);
+      }
+      requestAnimationFrame(fpsLoop);
+
       function el(tag, cls, txt) {
         var e = document.createElement(tag);
         if (cls) e.className = cls;
         if (txt != null) e.textContent = txt;
         return e;
       }
-      function toggle(initial, onChange) {
-        var sw = el('div', 'fk-sw' + (initial ? ' on' : ''));
-        var state = !!initial;
+
+      function toggle(lsKey, initialDefault, onChange) {
+        var savedVal = null;
+        try { savedVal = localStorage.getItem('iril_tg_' + lsKey); } catch (e) {}
+        
+        var state = savedVal !== null ? (savedVal === 'true') : !!initialDefault;
+        var sw = el('div', 'fk-sw' + (state ? ' on' : ''));
+        
+        if (state) {
+          try { onChange(true); } catch (e) {}
+        }
+
         sw.addEventListener('click', function () {
-          state = !state; sw.classList.toggle('on', state);
+          state = !state; 
+          sw.classList.toggle('on', state);
+          try { localStorage.setItem('iril_tg_' + lsKey, state); } catch (e) {}
           try { onChange(state); } catch (e) {}
           refreshFoot();
         });
         return { node: sw, get: function () { return state; }, set: function (v) { state = !!v; sw.classList.toggle('on', state); } };
       }
+
       function slider(min, max, step, val, fmt, onChange) {
         var wrap = el('div', 'fk-slider');
         var lb = el('label', null, '');
@@ -2366,7 +2274,7 @@
         return s;
       }
 
-      var panel = el('div', 'fk expanded');
+      var panel = el('div', 'fk collapsed');
       panel.setAttribute('data-pb', '1');
 
       var rail = el('div', 'fk-rail');
@@ -2375,10 +2283,20 @@
       head.appendChild(el('div', 'dot'));
       head.appendChild(el('div', 'title', 'iRiLLL MODZ'));
       head.appendChild(el('div', 'v', 'V' + V));
+      
+      var toggleGroup = el('div', 'fk-toggle-group');
+      
+      var hideUiBtn = el('div', 'fk-toggle');
+      hideUiBtn.innerHTML = '<i class="fa-solid fa-eye-slash"></i>';
+      hideUiBtn.title = 'Hide UI';
+      toggleGroup.appendChild(hideUiBtn);
+
       var toggleBtn = el('div', 'fk-toggle');
       toggleBtn.innerHTML = '<i class="fa-solid fa-minus"></i>';
       toggleBtn.title = 'Minimize';
-      head.appendChild(toggleBtn);
+      toggleGroup.appendChild(toggleBtn);
+      
+      head.appendChild(toggleGroup);
       var body = el('div', 'fk-body');
       bodyCol.appendChild(head);
       bodyCol.appendChild(body);
@@ -2397,6 +2315,24 @@
       panel.appendChild(rail);
       panel.appendChild(bodyCol);
       panel.appendChild(tabbar);
+
+      function setUiHidden(hidden) {
+        if (hidden) {
+          panel.style.display = 'none';
+          floatEye.style.display = 'flex';
+        } else {
+          panel.style.display = 'flex';
+          floatEye.style.display = 'none';
+        }
+      }
+
+      hideUiBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        setUiHidden(true);
+      });
+      floatEye.addEventListener('click', function () {
+        setUiHidden(false);
+      });
 
       var TAB_META = {
         aim:    { icon: 'fa-crosshairs',    label: 'AIM',    title: 'Aim Lock' },
@@ -2474,17 +2410,17 @@
       lfS.label.textContent = 'Lead factor'; pAim.appendChild(lfS.node);
 
       pAim.appendChild(sec('fa-lock', 'Aim Lock'));
-      var aimT = toggle(!!(window.__pb && window.__pb.state().aim), function (on) { if (on) window.__pb.on(); else window.__pb.off(); });
+      var aimT = toggle('aim_lock', false, function (on) { if (on) window.__pb.on(); else window.__pb.off(); });
       pAim.appendChild(row('Aim lock', aimT.node, 'Auto aim ke target'));
-      var autoFireT = toggle(!!P.autoFire, function (on) { P.autoFire = on ? 1 : 0; persistSet('autoFire', P.autoFire); });
+      var autoFireT = toggle('aim_autofire', false, function (on) { P.autoFire = on ? 1 : 0; });
       pAim.appendChild(row('Auto fire', autoFireT.node, 'Tembak otomatis saat lock'));
-      var invertT = toggle(!!O.invert, function (on) { O.invert = on; });
+      var invertT = toggle('aim_invert', false, function (on) { O.invert = on; });
       pAim.appendChild(row('Invert Y', invertT.node, 'Balik arah vertikal'));
 
       /* ===== AIMBOT ===== */
       var pAb = addTab('aimbot', 'AIMBOT');
       pAb.appendChild(sec('fa-bullseye', 'Aimbot'));
-      var aimbotT = toggle(!!P.aimbotOn, function (on) { window.__pb.aimbot(on); });
+      var aimbotT = toggle('aimbot_en', false, function (on) { window.__pb.aimbot(on); });
       pAb.appendChild(rowRisk('Enable aimbot', aimbotT.node, 'Snap saat fire + wajib POV'));
       var abGainS = slider(0.5, 3.0, 0.05, P.aimbotGain,
         function (v) { return 'x' + v.toFixed(2); },
@@ -2496,7 +2432,7 @@
       abHoldS.label.textContent = 'Lock duration'; pAb.appendChild(abHoldS.node);
 
       pAb.appendChild(sec('fa-circle-notch', 'POV Circle'));
-      var fcT = toggle(!!FC.on, function (on) { window.__pbx.fovc(on); });
+      var fcT = toggle('pov_circle_show', false, function (on) { window.__pbx.fovc(on); });
       pAb.appendChild(row('Show circle', fcT.node, 'Ring POV'));
       var povCircleS = slider(1, 1500, 1, P.povCircleR,
         function (v) { return v.toFixed(0) + 'px'; },
@@ -2507,19 +2443,19 @@
       /* ===== ESP ===== */
       var pEsp = addTab('esp', 'ESP');
       pEsp.appendChild(sec('fa-layer-group', 'Overlay'));
-      var espT = toggle(!!(window.__pbvis && window.__pbvis.is()), function (on) { if (on) window.__pbvis.on(); else window.__pbvis.off(); });
+      var espT = toggle('esp_enemy', false, function (on) { if (on) window.__pbvis.on(); else window.__pbvis.off(); });
       pEsp.appendChild(row('Enemy ESP', espT.node, 'Box + HP bar'));
-      var espNameT = toggle(!!E.nameOn, function (on) { window.__pbvis.name(on); });
+      var espNameT = toggle('esp_name', false, function (on) { window.__pbvis.name(on); });
       pEsp.appendChild(rowNew('ESP name', espNameT.node, 'Nama di atas box'));
-      var boneT = toggle(!!BE.on, function (on) { window.__pbvis.bone(on, BE.range); });
+      var boneT = toggle('esp_bone', false, function (on) { window.__pbvis.bone(on, BE.range); });
       pEsp.appendChild(rowRisk('Bone ESP', boneT.node, 'Skeleton musuh'));
-      var boneRangeS = slider(20, 120, 5, BE.range, function (v) { return v + 'm'; }, function (v) { BE.range = v; if (BE.on) window.__pbvis.bone(1, v); else persistSet('boneRange', v); });
+      var boneRangeS = slider(20, 120, 5, BE.range, function (v) { return v + 'm'; }, function (v) { BE.range = v; if (BE.on) window.__pbvis.bone(1, v); });
       boneRangeS.label.textContent = 'Bone range'; pEsp.appendChild(boneRangeS.node);
-      var hpoT = toggle(!!HPO.on, function (on) { window.__pbx.hpo(on); });
+      var hpoT = toggle('esp_hp', false, function (on) { window.__pbx.hpo(on); });
       pEsp.appendChild(row('HP overlay', hpoT.node, 'Angka HP'));
-      var rdT = toggle(!!RD.on, function (on) { window.__pbx.radar(on); });
+      var rdT = toggle('esp_radar', false, function (on) { window.__pbx.radar(on); });
       pEsp.appendChild(row('Radar mini', rdT.node, 'Minimap musuh'));
-      var trT = toggle(!!TR.on, function (on) { window.__pbx.tracer(on); });
+      var trT = toggle('esp_tracer', false, function (on) { window.__pbx.tracer(on); });
       pEsp.appendChild(row('ESP tracer', trT.node, 'Garis ke musuh'));
 
       pEsp.appendChild(sec('fa-heart-pulse', 'Damage'));
@@ -2529,47 +2465,47 @@
       /* ===== SILENT ===== */
       var pSil = addTab('silent', 'SILENT');
       pSil.appendChild(sec('fa-crosshairs', 'Silent Aim'));
-      var saT = toggle(!!SA.on, function (on) { window.__pbx.silent(on); });
+      var saT = toggle('silent_aim', false, function (on) { window.__pbx.silent(on); });
       pSil.appendChild(rowRisk('Silent aim', saT.node, 'Peluru auto ke kepala'));
       var saFovS = slider(30, 170, 5, SA.fovRad * 180 / Math.PI, function (v) { return v.toFixed(0) + '°'; }, function (v) { window.__pbx.silentFov(v); });
       saFovS.label.textContent = 'Silent FOV'; pSil.appendChild(saFovS.node);
       var saTgt = el('div', 'fk-sa-tgt', 'target: —');
       pSil.appendChild(saTgt);
-      var tbT = toggle(!!TB.on, function (on) { window.__pbx.trig(on); });
+      var tbT = toggle('auto_trig', false, function (on) { window.__pbx.trig(on); });
       pSil.appendChild(rowRisk('Auto trigger', tbT.node, 'Tembak saat target masuk'));
 
       pSil.appendChild(sec('fa-bullseye', 'Prediction'));
-      var predT = toggle(!!PR.on, function (on) { window.__pbx.pred(on, PR.ms); });
+      var predT = toggle('pred_lead', false, function (on) { window.__pbx.pred(on, PR.ms); });
       pSil.appendChild(rowRisk('Prediction (lead)', predT.node, 'Aim ke depan target'));
-      var predS = slider(0, 400, 10, PR.ms, function (v) { return v.toFixed(0) + 'ms'; }, function (v) { PR.ms = v; if (PR.on) window.__pbx.pred(1, v); else persistSet('predMs', v); });
+      var predS = slider(0, 400, 10, PR.ms, function (v) { return v.toFixed(0) + 'ms'; }, function (v) { PR.ms = v; if (PR.on) window.__pbx.pred(1, v); });
       predS.label.textContent = 'Lead time'; pSil.appendChild(predS.node);
 
       /* ===== SHOOT ===== */
       var pShoot = addTab('shoot', 'SHOOT');
       pShoot.appendChild(sec('fa-gun', 'Fire Rate'));
-      var sfT = toggle(!!SF.on, function (on) { window.__pbx.smoothFire(on); });
+      var sfT = toggle('smooth_fire', false, function (on) { window.__pbx.smoothFire(on); });
       pShoot.appendChild(row('Smooth fire', sfT.node, 'Anti macet'));
-      var rapidT = toggle(!!RF.on, function (on) { window.__pbx.rapid(on); });
+      var rapidT = toggle('rapid_fire', false, function (on) { window.__pbx.rapid(on); });
       pShoot.appendChild(rowRisk('Rapid fire', rapidT.node, 'Hilangkan jeda'));
-      var isT2 = toggle(!!IS.on, function (on) { window.__pbx.instScope(on); });
+      var isT2 = toggle('inst_scope', false, function (on) { window.__pbx.instScope(on); });
       pShoot.appendChild(rowRisk('Instant scope', isT2.node, 'Scope cepat'));
 
       /* ===== COMBAT ===== */
       var pCombat = addTab('combat', 'COMBAT');
       pCombat.appendChild(sec('fa-shield-halved', 'Weapon'));
-      var wallT = toggle(!!FL.wallbang, function (on) { window.__pbx.wallbang(on); });
+      var wallT = toggle('combat_wallbang', false, function (on) { window.__pbx.wallbang(on); });
       pCombat.appendChild(rowRisk('Wallbang', wallT.node, 'Tembus dinding'));
-      var ammoT = toggle(!!FL.infAmmo, function (on) { window.__pbx.infAmmo(on); });
+      var ammoT = toggle('combat_infammo', false, function (on) { window.__pbx.infAmmo(on); });
       pCombat.appendChild(rowRisk('Infinite ammo', ammoT.node, 'Ammo tak habis'));
-      var nrecT = toggle(!!FL.noRecoil, function (on) { window.__pbx.noRecoil(on); });
+      var nrecT = toggle('combat_norecoil', false, function (on) { window.__pbx.noRecoil(on); });
       pCombat.appendChild(rowRisk('No recoil', nrecT.node, 'Recoil nol'));
 
       /* ===== FLY ===== */
       var pFly = addTab('fly', 'FLY');
       pFly.appendChild(sec('fa-plane', 'Fly'));
-      var flyT = toggle(!!FLY.on, function (on) { window.__pbx.fly(on); });
+      var flyT = toggle('fly_on', false, function (on) { window.__pbx.fly(on); });
       pFly.appendChild(rowRisk('Fly', flyT.node, 'Hold jump = naik'));
-      var flyBypassT = toggle(!!FLYB.on, function (on) { window.__pbx.flyBypass(on); });
+      var flyBypassT = toggle('fly_bypass', false, function (on) { window.__pbx.flyBypass(on); });
       pFly.appendChild(rowRisk('Fly bypass', flyBypassT.node, 'Anti deteksi fly'));
       var flyModeSel = el('select', 'fk-select');
       flyModeSel.innerHTML =
@@ -2582,25 +2518,25 @@
       /* ===== NOCLIP ===== */
       var pNc = addTab('noclip', 'NOCLIP');
       pNc.appendChild(sec('fa-ghost', 'Noclip'));
-      var ncT = toggle(!!FL.noclip, function (on) { window.__pbx.noclip(on); });
+      var ncT = toggle('noclip_real', false, function (on) { window.__pbx.noclip(on); });
       pNc.appendChild(rowRisk('Noclip (real)', ncT.node, 'Tembus dinding'));
 
       /* ===== NADE ===== */
       var pNade = addTab('nade', 'NADE');
       pNade.appendChild(sec('fa-bomb', 'Silent Nade'));
-      var snadeT = toggle(!!SN.on, function (on) { window.__pbx.silentNade(on); });
+      var snadeT = toggle('silent_nade', false, function (on) { window.__pbx.silentNade(on); });
       pNade.appendChild(rowRisk('Silent nade', snadeT.node, 'Granat ngejar target'));
-      var snadeBypassT = toggle(!!SNB.on, function (on) { window.__pbx.silentNadeBypass(on); });
+      var snadeBypassT = toggle('silent_nade_bp', false, function (on) { window.__pbx.silentNadeBypass(on); });
       pNade.appendChild(rowRisk('Nade bypass', snadeBypassT.node, 'Anti deteksi nade'));
-      var snadeHomeT = toggle(!!SN.homing, function (on) { window.__pbx.silentNadeHoming(on); });
+      var snadeHomeT = toggle('silent_nade_home', false, function (on) { window.__pbx.silentNadeHoming(on); });
       pNade.appendChild(rowRisk('Homing', snadeHomeT.node, 'Teleport tiap frame'));
-      var snadeLosT = toggle(!!SN.requireLOS, function (on) { window.__pbx.silentNadeLOS(on); });
+      var snadeLosT = toggle('silent_nade_los', false, function (on) { window.__pbx.silentNadeLOS(on); });
       pNade.appendChild(rowRisk('Require LOS', snadeLosT.node, 'Hanya target kelihatan'));
       var snadeStat = el('div', 'fk-sa-tgt', 'snade: off');
       pNade.appendChild(snadeStat);
 
       pNade.appendChild(sec('fa-bomb', 'Unlimited Grenade'));
-      var infNadeT = toggle(!!FL.infNade, function (on) { window.__pbx.infNade(on); });
+      var infNadeT = toggle('inf_nade', false, function (on) { window.__pbx.infNade(on); });
       pNade.appendChild(rowNew('Unlimited Grenade', infNadeT.node, 'Semua granat unlimited'));
       var infNadeMaxS = slider(1, 999, 1, FL.infNadeMax,
         function (v) { return v.toFixed(0) + 'x'; },
@@ -2613,15 +2549,15 @@
       /* ===== MOVE ===== */
       var pMove = addTab('move', 'MOVE');
       pMove.appendChild(sec('fa-feather', 'Survival'));
-      var noFallT = toggle(!!FL.noFall, function (on) { window.__pbx.noFall(on); });
+      var noFallT = toggle('no_fall', false, function (on) { window.__pbx.noFall(on); });
       pMove.appendChild(row('No fall damage', noFallT.node, 'Tidak mati jatuh'));
 
       /* ===== MISC ===== */
       var pMisc = addTab('misc', 'MISC');
       pMisc.appendChild(sec('fa-right-left', 'Quick Swap'));
-      var qcT = toggle(!!(window.__pbqc && window.__pbqc.st().on), function (on) { if (on) window.__pbqc.on(); else window.__pbqc.off(); });
+      var qcT = toggle('quick_swap', false, function (on) { if (on) window.__pbqc.on(); else window.__pbqc.off(); });
       pMisc.appendChild(row('Quick swap', qcT.node, 'Ganti senjata instan'));
-      var qcFastT = toggle(!!(window.__pbqc && window.__pbqc.st().fast), function (on) { window.__pbqc.cfg({ fast: on ? 1 : 0 }); });
+      var qcFastT = toggle('inst_swap', false, function (on) { window.__pbqc.cfg({ fast: on ? 1 : 0 }); });
       pMisc.appendChild(row('Instant swap', qcFastT.node, 'Skip animasi'));
       var swapBtn = el('div', 'fk-btn');
       swapBtn.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i> Swap (Q)';
@@ -2630,13 +2566,13 @@
       swapWrap.appendChild(swapBtn); pMisc.appendChild(swapWrap);
 
       pMisc.appendChild(sec('fa-heart', 'Survival'));
-      var irT = toggle(!!IR.on, function (on) { window.__pbx.respawn(on); });
+      var irT = toggle('inst_respawn', false, function (on) { window.__pbx.respawn(on); });
       pMisc.appendChild(row('Instant respawn', irT.node, 'Hidup langsung'));
-      var godT = toggle(!!FL.godmode, function (on) { window.__pbx.godmode(on); });
+      var godT = toggle('godmode', false, function (on) { window.__pbx.godmode(on); });
       pMisc.appendChild(rowRisk('Godmode', godT.node, 'Unlimited spawn flicker'));
 
       pMisc.appendChild(sec('fa-toolbox', 'Utility'));
-      var akT = toggle(!!FL.antiKick, function (on) { window.__pbx.antiKick(on); });
+      var akT = toggle('anti_kick', false, function (on) { window.__pbx.antiKick(on); });
       pMisc.appendChild(rowRisk('Anti-kick', akT.node, 'Blokir kick/ban'));
 
       /* ===== INFO ===== */
@@ -2665,11 +2601,10 @@
       resetBtn.innerHTML = '<i class="fa-solid fa-trash-can"></i> Reset semua';
       resetBtn.addEventListener('click', function () {
         try {
-          // Hapus persist state dulu
-          try { localStorage.removeItem(PERSIST_KEY); } catch (e) {}
-          __persist.data = {};
-          __persist.enabled = 1;
-
+          var keys = Object.keys(localStorage);
+          for(var i=0; i<keys.length; i++) {
+            if(keys[i].indexOf('iril_tg_') === 0) localStorage.removeItem(keys[i]);
+          }
           window.__pb.off(); window.__pbvis.off();
           window.__pbqc.off(); window.__pbqc.cfg({ fast: 0 });
           window.__pbx.pred(0); window.__pbx.rapid(0);
@@ -2690,13 +2625,8 @@
           window.__pbx.flyBypass(0);
           window.__pbx.silentNade(0);
           window.__pbx.silentNadeBypass(0);
-          window.__pbx.silentNadeHoming(0);
-          window.__pbx.silentNadeLOS(0);
           window.__pbx.infNade(0); window.__pbx.infNadeMax(99);
           window.__pbx.noFall(0);
-          // Hapus persist setelah set semua ke default — supaya tidak overwrite save baru
-          try { localStorage.removeItem(PERSIST_KEY); } catch (e) {}
-          __persist.data = {};
           syncAll();
         } catch (e) {}
       });
@@ -2753,7 +2683,7 @@
           }
         } catch (e) { foot.textContent = '…'; }
       }
-      setInterval(refreshFoot, 300);
+      setInterval(refreshFoot, 500);
 
       function syncAll() {
         try {
@@ -2798,36 +2728,42 @@
           }
         } catch (e) {}
       }
-      setInterval(syncAll, 1000);
+      setInterval(syncAll, 1500);
 
       (function () {
         var dragging = false, ox = 0, oy = 0;
-        head.addEventListener('mousedown', function (e) {
-          if (e.target === toggleBtn) return;
+        function dragStart(e) {
+          if (e.target === toggleBtn || e.target === hideUiBtn || e.target === tbOpen) return;
           dragging = true;
+          var clientX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+          var clientY = e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
           var r = panel.getBoundingClientRect();
-          ox = e.clientX - r.left; oy = e.clientY - r.top;
-        });
-        addEventListener('mousemove', function (e) {
+          ox = clientX - r.left; oy = clientY - r.top;
+        }
+        function dragMove(e) {
           if (!dragging) return;
-          var x = e.clientX - ox, y = e.clientY - oy;
+          var clientX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+          var clientY = e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+          if (!clientX && !clientY) return;
+          var x = clientX - ox, y = clientY - oy;
           x = Math.max(4, Math.min(innerWidth - 60, x));
           y = Math.max(4, Math.min(innerHeight - 40, y));
           panel.style.left = x + 'px'; panel.style.top = y + 'px';
           panel.style.right = 'auto';
-        });
-        addEventListener('touchmove', function (e) {
-          if (!dragging) return;
-          if (!e.touches || !e.touches[0]) return;
-          var t = e.touches[0];
-          var x = t.clientX - ox, y = t.clientY - oy;
-          x = Math.max(4, Math.min(innerWidth - 60, x));
-          y = Math.max(4, Math.min(innerHeight - 40, y));
-          panel.style.left = x + 'px'; panel.style.top = y + 'px';
-          panel.style.right = 'auto';
-        }, { passive: true });
-        addEventListener('mouseup', function () { dragging = false; });
-        addEventListener('touchend', function () { dragging = false; });
+        }
+        function dragEnd() { dragging = false; }
+
+        head.addEventListener('mousedown', dragStart);
+        tabbar.addEventListener('mousedown', dragStart);
+
+        head.addEventListener('touchstart', dragStart, { passive: true });
+        tabbar.addEventListener('touchstart', dragStart, { passive: true });
+
+        addEventListener('mousemove', dragMove);
+        addEventListener('touchmove', dragMove, { passive: true });
+
+        addEventListener('mouseup', dragEnd);
+        addEventListener('touchend', dragEnd);
       })();
 
       function mount() {
@@ -2838,9 +2774,8 @@
         try { lastTab = localStorage.getItem(TAB_KEY) || 'aim'; } catch (e) {}
         if (!pages[lastTab]) lastTab = 'aim';
         selectTab(lastTab);
-        var collapsed = false;
-        try { collapsed = localStorage.getItem('ir_collapsed') === '1'; } catch (e) {}
-        setCollapsed(collapsed);
+        
+        setCollapsed(true);
         refreshFoot();
       }
       mount();
